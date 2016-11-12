@@ -6,6 +6,7 @@ import (
 	"net"
 )
 
+// Network struct
 type Network struct {
 	Interfaces    []net.Interface
 	UpInterfaces  map[string]string
@@ -14,6 +15,7 @@ type Network struct {
 	PFRules       bytes.Buffer
 }
 
+// New returns a Network struct
 func New(peerIP string) (*Network, error) {
 	ip := net.ParseIP(peerIP)
 	ifaces, err := net.Interfaces()
@@ -28,6 +30,7 @@ func New(peerIP string) (*Network, error) {
 	}, nil
 }
 
+// GetActive finds active interfaces
 func (n *Network) GetActive() error {
 	for _, i := range n.Interfaces {
 		if i.Flags&net.FlagUp == 0 {

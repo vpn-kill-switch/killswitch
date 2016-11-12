@@ -3,10 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
+	"os/user"
+	"path"
 
-	"github.com/nbari/killswitch"
+	"github.com/vpn-kill-switch/killswitch"
 )
 
 func exit1(err error) {
@@ -49,4 +52,15 @@ func main() {
 	ks.CreatePF()
 
 	fmt.Println(ks.PFRules.String())
+
+	usr, err := user.Current()
+	if err != nil {
+		exit1(err)
+	}
+	if err = ioutil.WriteFile(path.Join(usr.HomeDir, ".killswitch.pf.conf"),
+		ks.PFRules.Bytes(),
+		0644,
+	); err != nil {
+		exit1(err)
+	}
 }
