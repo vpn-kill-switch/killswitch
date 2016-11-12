@@ -49,6 +49,10 @@ func main() {
 		exit1(err)
 	}
 
+	if len(ks.P2PInterfaces) == 0 {
+		exit1(fmt.Errorf("No VPN interface found, verify VPN is connected, use (\"%s -h\" for help.\n", os.Args[0]))
+	}
+
 	ks.CreatePF()
 
 	fmt.Println(ks.PFRules.String())

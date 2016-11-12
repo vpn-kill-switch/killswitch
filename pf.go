@@ -26,7 +26,7 @@ func (n *Network) CreatePF() {
 	for k := range n.P2PInterfaces {
 		n.PFRules.WriteString(fmt.Sprintf("vpn_%s = %q\n", k, k))
 		antispoof.WriteString(fmt.Sprintf("antispoof for $vpn_%s inet\n", k))
-		pass.WriteString(fmt.Sprintf("pass out on $vpn_%s", k))
+		pass.WriteString(fmt.Sprintf("pass out on $vpn_%s all\n", k))
 	}
 	// add vpn peer IP
 	n.PFRules.WriteString(fmt.Sprintf("vpn_ip = %q\n", n.PeerIP))
