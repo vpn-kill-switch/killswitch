@@ -35,7 +35,7 @@ func main() {
 	var (
 		ip = flag.String("ip", "", "VPN peer `IPv4`")
 		e  = flag.Bool("e", false, "`Enable` load the pf rules")
-		i  = flag.Bool("i", false, "`Info` print active interfaces.")
+		i  = flag.Bool("i", false, "`Info` print active interfaces and public IP address")
 		v  = flag.Bool("v", false, fmt.Sprintf("Print version: %s", version))
 	)
 
@@ -68,6 +68,7 @@ func main() {
 		for k, v := range ks.P2PInterfaces {
 			fmt.Printf("%s %s   %s\n", PadRight(k, " ", 10), PadRight(v[0], " ", 17), v[1])
 		}
+		fmt.Printf("\npublic IP address: %s\n", killswitch.Whoami())
 		return
 	}
 
