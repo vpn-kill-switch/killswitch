@@ -9,8 +9,8 @@ import (
 // Network struct
 type Network struct {
 	Interfaces    []net.Interface
-	UpInterfaces  map[string]string
-	P2PInterfaces map[string]string
+	UpInterfaces  map[string][]string
+	P2PInterfaces map[string][]string
 	PeerIP        string
 	PFRules       bytes.Buffer
 }
@@ -24,8 +24,8 @@ func New(peerIP string) (*Network, error) {
 	}
 	return &Network{
 		Interfaces:    ifaces,
-		UpInterfaces:  make(map[string]string),
-		P2PInterfaces: make(map[string]string),
+		UpInterfaces:  make(map[string][]string),
+		P2PInterfaces: make(map[string][]string),
 		PeerIP:        ip.String(),
 	}, nil
 }
@@ -59,9 +59,9 @@ func (n *Network) GetActive() error {
 				continue // not an ipv4 address
 			}
 			if i.Flags&net.FlagPointToPoint != 0 {
-				n.P2PInterfaces[i.Name] = ip.String()
+				n.P2PInterfaces[i.Name] = []string{i.HardwareAddr.String(), ip.String()}
 			} else {
-				n.UpInterfaces[i.Name] = ip.String()
+				n.UpInterfaces[i.Name] = []string{i.HardwareAddr.String(), ip.String()}
 			}
 		}
 	}
