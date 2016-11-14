@@ -35,7 +35,7 @@ func main() {
 	var (
 		ip = flag.String("ip", "", "VPN peer `IPv4`")
 		e  = flag.Bool("e", false, "`Enable` load the pf rules")
-		i  = flag.Bool("i", false, "`Info` print active interfaces.")
+		i  = flag.Bool("i", false, "`Info` print active interfaces and public IP address")
 		v  = flag.Bool("v", false, fmt.Sprintf("Print version: %s", version))
 	)
 
