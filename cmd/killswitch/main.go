@@ -14,6 +14,15 @@ import (
 	"github.com/vpn-kill-switch/killswitch"
 )
 
+func PadRight(str, pad string, lenght int) string {
+	for {
+		str += pad
+		if len(str) > lenght {
+			return str[0:lenght]
+		}
+	}
+}
+
 func exit1(err error) {
 	fmt.Println(err)
 	os.Exit(1)
@@ -47,11 +56,22 @@ func main() {
 		exit1(err)
 	}
 
+	if len(ks.UpInterfaces) == 0 {
+		exit1(fmt.Errorf("No active interfaces found, verify network settings, use (\"%s -h\") for help.\n", os.Args[0]))
+	}
+
 	if *i {
+		fmt.Println("Interface  MAC address         IP")
 		for k, v := range ks.UpInterfaces {
-			fmt.Println(k, v)
+			fmt.Printf("%s %s   %s\n", PadRight(k, " ", 10), v[0], v[1])
 		}
-	} else if *ip == "" {
+		for k, v := range ks.P2PInterfaces {
+			fmt.Printf("%s %s   %s\n", PadRight(k, " ", 10), PadRight(v[0], " ", 17), v[1])
+		}
+		return
+	}
+
+	if *ip == "" {
 		exit1(fmt.Errorf("Please enter the VPN peer IP, use (\"%s -h\") for help.\n", os.Args[0]))
 	} else if ipv4 := net.ParseIP(*ip); ipv4.To4() == nil {
 		exit1(fmt.Errorf("%s is not a valid IPv4 address, use (\"%s -h\") for help.\n", *ip, os.Args[0]))
