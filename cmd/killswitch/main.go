@@ -68,6 +68,7 @@ func main() {
 		for k, v := range ks.P2PInterfaces {
 			fmt.Printf("%s %s   %s\n", PadRight(k, " ", 10), PadRight(v[0], " ", 17), v[1])
 		}
+		fmt.Printf("\npublic IP address: %s\n", killswitch.Whoami())
 		return
 	}
 
