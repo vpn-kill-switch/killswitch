@@ -18,8 +18,7 @@ func (n *Network) CreatePF() {
 	// create var for interfaces
 	for k := range n.UpInterfaces {
 		n.PFRules.WriteString(fmt.Sprintf("int_%s = %q\n", k, k))
-		pass.WriteString(fmt.Sprintf("pass on $int_%s proto udp to 224.0.0.251 port 5353\n", k))
-		pass.WriteString(fmt.Sprintf("pass on $int_%s proto udp from any port 67 to any port 68\n", k))
+		pass.WriteString(fmt.Sprintf("pass on $int_%s proto {tcp,udp} from any port 67:68 to any port 67:68 keep state\n", k))
 		pass.WriteString(fmt.Sprintf("pass on $int_%s inet proto icmp all icmp-type 8 code 0\n", k))
 		pass.WriteString(fmt.Sprintf("pass on $int_%s proto {tcp, udp} from any to $vpn_ip\n", k))
 	}
@@ -34,5 +33,10 @@ func (n *Network) CreatePF() {
 	n.PFRules.WriteString("set ruleset-optimization basic\n")
 	n.PFRules.WriteString("set skip on lo0\n")
 	n.PFRules.WriteString("block all\n")
+	n.PFRules.WriteString("pass quick proto {tcp, udp} from any to any port 53 keep state\n")
+	n.PFRules.WriteString("pass from any to 255.255.255.255 keep state\n")
+	n.PFRules.WriteString("pass from 255.255.255.255 to any keep state\n")
+	n.PFRules.WriteString("pass proto udp from any to 224.0.0.0/4 keep state\n")
+	n.PFRules.WriteString("pass proto udp from 224.0.0.0/4 to any keep state\n")
 	n.PFRules.WriteString(pass.String())
 }
