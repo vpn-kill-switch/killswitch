@@ -17,7 +17,17 @@ type Network struct {
 
 // New returns a Network struct
 func New(peerIP string) (*Network, error) {
-	ip := net.ParseIP(peerIP)
+	var (
+		ip  net.IP
+		err error
+	)
+	if peerIP != "" {
+		ip = net.ParseIP(peerIP)
+	} else {
+		if ip, err = UGSX(); err != nil {
+			return nil, err
+		}
+	}
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return nil, err
