@@ -33,9 +33,8 @@ var version string
 func main() {
 
 	var (
-		ip = flag.String("ip", "", "VPN peer `IPv4`")
+		ip = flag.String("ip", "", "VPN peer `IPv4`, killswitch tries to find this automatically")
 		e  = flag.Bool("e", false, "`Enable` load the pf rules")
-		i  = flag.Bool("i", false, "`Info` print active interfaces and public IP address")
 		v  = flag.Bool("v", false, fmt.Sprintf("Print version: %s", version))
 	)
 
@@ -60,30 +59,32 @@ func main() {
 		exit1(fmt.Errorf("No active interfaces found, verify network settings, use (\"%s -h\") for help.\n", os.Args[0]))
 	}
 
-	if *i {
-		fmt.Println("Interface  MAC address         IP")
-		for k, v := range ks.UpInterfaces {
-			fmt.Printf("%s %s   %s\n", PadRight(k, " ", 10), v[0], v[1])
-		}
-		for k, v := range ks.P2PInterfaces {
-			fmt.Printf("%s %s   %s\n", PadRight(k, " ", 10), PadRight(v[0], " ", 17), v[1])
-		}
-		fmt.Printf("\npublic IP address: %s\n", killswitch.Whoami())
-		return
+	fmt.Println("Interface  MAC address         IP")
+	for k, v := range ks.UpInterfaces {
+		fmt.Printf("%s %s   %s\n", PadRight(k, " ", 10), v[0], v[1])
 	}
-
-	if *ip == "" {
-		exit1(fmt.Errorf("Please enter the VPN peer IP, use (\"%s -h\") for help.\n", os.Args[0]))
-	} else if ipv4 := net.ParseIP(*ip); ipv4.To4() == nil {
-		exit1(fmt.Errorf("%s is not a valid IPv4 address, use (\"%s -h\") for help.\n", *ip, os.Args[0]))
+	for k, v := range ks.P2PInterfaces {
+		fmt.Printf("%s %s   %s\n", PadRight(k, " ", 10), PadRight(v[0], " ", 17), v[1])
 	}
+	fmt.Printf("\nPublic IP address: %s\n", killswitch.Red(killswitch.Whoami()))
 
 	if len(ks.P2PInterfaces) == 0 {
-		exit1(fmt.Errorf("No VPN interface found, verify VPN is connected, use (\"%s -h\") for help.\n", os.Args[0]))
+		exit1(fmt.Errorf("No VPN interface found, verify VPN is connected"))
+	}
+
+	fmt.Printf("PEER IP address:   %s\n", killswitch.Yellow(ks.PeerIP))
+
+	if *ip != "" {
+		if ipv4 := net.ParseIP(*ip); ipv4.To4() == nil {
+			exit1(fmt.Errorf("%s is not a valid IPv4 address, use (\"%s -h\") for help.\n", *ip, os.Args[0]))
+		}
 	}
 
 	ks.CreatePF()
 
+	fmt.Printf("\n%s: %s\n", "To enable the kill switch run", killswitch.Green("sudo killswitch -e"))
+	fmt.Printf("\n%s: %s\n\n", "To disable run", killswitch.Yellow("sudo pf -Fa -f /etc/pf.conf"))
+	fmt.Printf("PF rules to be loaded:\n")
 	fmt.Println(ks.PFRules.String())
 
 	usr, err := user.Current()
