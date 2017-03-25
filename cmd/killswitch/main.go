@@ -36,6 +36,7 @@ func main() {
 		ip = flag.String("ip", "", "VPN peer `IPv4`, killswitch tries to find this automatically")
 		d  = flag.Bool("d", false, "`Disable` load /etc/pf.conf rules")
 		e  = flag.Bool("e", false, "`Enable` load the pf rules")
+		p  = flag.Bool("p", false, "`Print` the pf rules")
 		v  = flag.Bool("v", false, fmt.Sprintf("Print version: %s", version))
 	)
 
@@ -90,7 +91,7 @@ func main() {
 				fmt.Printf("Public IP address (DNS): %s\n", killswitch.Red(ipDNS))
 				fmt.Printf("Public IP address (WWW): %s\n", killswitch.Red(ipWWW))
 			} else {
-				fmt.Printf("\nPublic IP address: %s\n", ipDNS)
+				fmt.Printf("\nPublic IP address: %s\n", killswitch.Red(ipDNS))
 			}
 		}
 	}
@@ -113,9 +114,12 @@ func main() {
 	ks.CreatePF()
 
 	fmt.Printf("\n%s: %s\n", "To enable the kill switch run", killswitch.Green("sudo killswitch -e"))
-	fmt.Printf("\n%s: %s\n\n", "To disable run", killswitch.Yellow("sudo pfctl -Fa -f /etc/pf.conf"))
-	fmt.Printf("PF rules to be loaded:\n")
-	fmt.Println(ks.PFRules.String())
+	fmt.Printf("%s: %s\n\n", "To disable", killswitch.Yellow("sudo killswitch -d"))
+
+	if *p {
+		fmt.Printf("PF rules to be loaded:\n")
+		fmt.Println(ks.PFRules.String())
+	}
 
 	usr, err := user.Current()
 	if err != nil {
