@@ -1,9 +1,16 @@
 package killswitch
 
-import "github.com/miekg/dns"
+import (
+	"fmt"
+	"io/ioutil"
+	"net/http"
+	"strings"
 
-// Whoami return public ip
-func Whoami() string {
+	"github.com/miekg/dns"
+)
+
+// WhoamiDNS return public ip by quering DNS server
+func WhoamiDNS() (string, error) {
 	var record *dns.TXT
 
 	target := "o-o.myaddr.l.google.com"
@@ -16,16 +23,31 @@ func Whoami() string {
 	r, _, err := c.Exchange(&m, server+":53")
 
 	if err != nil {
-		return "Could not found public IP"
+		return "", err
 	}
 
 	if len(r.Answer) == 0 {
-		return "Could not found public IP"
+		return "", fmt.Errorf("Could not found public IP\n")
 	}
 
 	for _, ans := range r.Answer {
 		record = ans.(*dns.TXT)
 	}
 
-	return record.Txt[0]
+	return strings.TrimSpace(record.Txt[0]), nil
+}
+
+// WhoamiWWW return IP by quering http server
+func WhoamiWWW() (string, error) {
+	client := &http.Client{}
+	// Create request
+	req, err := http.NewRequest("GET", "http://checkip.amazonaws.com/", nil)
+	// Fetch Request
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	// Read Response Body
+	respBody, _ := ioutil.ReadAll(resp.Body)
+	return strings.TrimSpace(string(respBody)), nil
 }

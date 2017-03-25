@@ -82,7 +82,21 @@ func main() {
 	for k, v := range ks.P2PInterfaces {
 		fmt.Printf("%s %s   %s\n", PadRight(k, " ", 10), PadRight(v[0], " ", 17), v[1])
 	}
-	fmt.Printf("\nPublic IP address: %s\n", killswitch.Red(killswitch.Whoami()))
+	// check for DNS leaks
+	if ipDNS, err := killswitch.WhoamiDNS(); err == nil {
+		if ipWWW, err := killswitch.WhoamiWWW(); err == nil {
+			if ipDNS != ipWWW {
+				fmt.Printf("\n%s:\n", killswitch.Red("DNS leaking"))
+				fmt.Printf("Public IP address (DNS): %s\n", killswitch.Red(ipDNS))
+				fmt.Printf("Public IP address (WWW): %s\n", killswitch.Red(ipWWW))
+			} else {
+				fmt.Printf("\nPublic IP address: %s\n", ipDNS)
+			}
+		}
+	}
+
+	// add some space
+	println()
 
 	if len(ks.P2PInterfaces) == 0 {
 		exit1(fmt.Errorf("No VPN interface found, verify VPN is connected"))
