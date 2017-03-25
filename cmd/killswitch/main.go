@@ -113,7 +113,7 @@ func main() {
 	ks.CreatePF()
 
 	fmt.Printf("\n%s: %s\n", "To enable the kill switch run", killswitch.Green("sudo killswitch -e"))
-	fmt.Printf("\n%s: %s\n\n", "To disable run", killswitch.Yellow("sudo pfctl -Fa -f /etc/pf.conf"))
+	fmt.Printf("%s: %s\n\n", "To disable", killswitch.Yellow("sudo killswitch -d"))
 	fmt.Printf("PF rules to be loaded:\n")
 	fmt.Println(ks.PFRules.String())
 
