@@ -91,7 +91,7 @@ func main() {
 				fmt.Printf("Public IP address (DNS): %s\n", killswitch.Red(ipDNS))
 				fmt.Printf("Public IP address (WWW): %s\n", killswitch.Red(ipWWW))
 			} else {
-				fmt.Printf("\nPublic IP address: %s\n", ipDNS)
+				fmt.Printf("\nPublic IP address: %s\n", killswitch.Red(ipDNS))
 			}
 		}
 	}
