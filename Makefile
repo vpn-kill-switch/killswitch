@@ -2,7 +2,7 @@
 
 GO ?= go
 BIN_NAME=killswitch
-GO_XC = ${GOPATH}/bin/goxc -os="freebsd openbsd netbsd darwin"
+GO_XC = ${GOPATH}/bin/goxc -os="freebsd darwin"
 GOXC_FILE = .goxc.json
 GOXC_FILE_LOCAL = .goxc.local.json
 VERSION=$(shell git describe --tags --always)
@@ -13,6 +13,7 @@ get:
 	${GO} get
 
 build: get
+	${GO} get -u golang.org/x/net/route
 	${GO} build -ldflags "-X main.version=${VERSION}" -o ${BIN_NAME} cmd/killswitch/main.go;
 
 clean:
