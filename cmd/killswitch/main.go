@@ -7,8 +7,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"os/user"
-	"path"
 	"strings"
 
 	"github.com/vpn-kill-switch/killswitch"
@@ -121,11 +119,7 @@ func main() {
 		fmt.Println(ks.PFRules.String())
 	}
 
-	usr, err := user.Current()
-	if err != nil {
-		exit1(err)
-	}
-	if err = ioutil.WriteFile(path.Join(usr.HomeDir, ".killswitch.pf.conf"),
+	if err = ioutil.WriteFile("/tmp/killswitch.pf.conf",
 		ks.PFRules.Bytes(),
 		0644,
 	); err != nil {
@@ -141,7 +135,7 @@ func main() {
 		out, _ = exec.Command("pfctl",
 			"-Fa",
 			"-f",
-			path.Join(usr.HomeDir, ".killswitch.pf.conf")).CombinedOutput()
+			"/tmp/killswitch.pf.conf").CombinedOutput()
 		fmt.Printf("%s\n", out)
 		out, _ = exec.Command("pfctl", "-sr").CombinedOutput()
 		fmt.Printf("%s\n", out)

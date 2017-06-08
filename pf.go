@@ -12,7 +12,7 @@ func (n *Network) CreatePF() {
 	var pass bytes.Buffer
 	n.PFRules.WriteString(fmt.Sprintf("# %s\n", strings.Repeat("-", 62)))
 	n.PFRules.WriteString(fmt.Sprintf("# %s\n", time.Now().Format(time.RFC1123Z)))
-	n.PFRules.WriteString("# sudo pfctl -Fa -f ~/.killswitch.pf.conf -e\n")
+	n.PFRules.WriteString("# sudo pfctl -Fa -f /tmp/killswitch.pf.conf -e\n")
 	n.PFRules.WriteString(fmt.Sprintf("# %s\n", strings.Repeat("-", 62)))
 
 	// create var for interfaces
