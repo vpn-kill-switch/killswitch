@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	// man netstat
+	// UGSH man netstat
 	UGSH = syscall.RTF_UP | syscall.RTF_GATEWAY | syscall.RTF_STATIC | syscall.RTF_HOST
+	// UGSc man netstat
 	UGSc = syscall.RTF_UP | syscall.RTF_GATEWAY | syscall.RTF_STATIC | syscall.RTF_PRCLONING
 )
 
