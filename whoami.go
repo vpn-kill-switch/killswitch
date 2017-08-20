@@ -27,7 +27,7 @@ func WhoamiDNS() (string, error) {
 	}
 
 	if len(r.Answer) == 0 {
-		return "", fmt.Error("could not found public IP")
+		return "", fmt.Errorf("could not found public IP")
 	}
 
 	for _, ans := range r.Answer {
