@@ -13,11 +13,11 @@ import (
 )
 
 // PadRight add spaces for aligning the output
-func PadRight(str, pad string, lenght int) string {
+func PadRight(str, pad string, length int) string {
 	for {
 		str += pad
-		if len(str) > lenght {
-			return str[0:lenght]
+		if len(str) > length {
+			return str[0:length]
 		}
 	}
 }
