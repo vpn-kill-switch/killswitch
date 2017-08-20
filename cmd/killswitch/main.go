@@ -12,6 +12,7 @@ import (
 	"github.com/vpn-kill-switch/killswitch"
 )
 
+// PadRight add spaces for aligning the output
 func PadRight(str, pad string, lenght int) string {
 	for {
 		str += pad

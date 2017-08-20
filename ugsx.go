@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	// man netstat
 	UGSH = syscall.RTF_UP | syscall.RTF_GATEWAY | syscall.RTF_STATIC | syscall.RTF_HOST
 	UGSc = syscall.RTF_UP | syscall.RTF_GATEWAY | syscall.RTF_STATIC | syscall.RTF_PRCLONING
 )
@@ -28,6 +29,7 @@ func privateIP(ip string) (bool, error) {
 	return private, err
 }
 
+// UGSX find IP of the vpn by matching existing route flags, man netstat
 func UGSX() (net.IP, error) {
 	rib, err := route.FetchRIB(syscall.AF_UNSPEC, route.RIBTypeRoute, 0)
 	if err != nil {
