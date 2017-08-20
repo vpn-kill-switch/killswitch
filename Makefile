@@ -11,10 +11,10 @@ all: clean build
 
 get:
 	${GO} get
+	${GO} get -u golang.org/x/net/route
 
 build: get
-	${GO} get -u golang.org/x/net/route
-	${GO} build -ldflags "-X main.version=${VERSION}" -o ${BIN_NAME} cmd/killswitch/main.go;
+	${GO} build -ldflags "-s -w -X main.version=${VERSION}" -o ${BIN_NAME} cmd/killswitch/main.go;
 
 clean:
 	@rm -rf ${BIN_NAME} ${BIN_NAME}.debug *.out build
