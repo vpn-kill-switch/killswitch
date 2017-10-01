@@ -10,8 +10,7 @@ VERSION=$(shell git describe --tags --always)
 all: clean build
 
 get:
-	${GO} get
-	${GO} get -u golang.org/x/net/route
+	dep ensure
 
 build: get
 	${GO} build -ldflags "-s -w -X main.version=${VERSION}" -o ${BIN_NAME} cmd/killswitch/main.go;
