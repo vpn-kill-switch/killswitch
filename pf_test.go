@@ -38,4 +38,18 @@ func TestPf(t *testing.T) {
 		}
 		t.Logf("\t%s\t Should contain vpn string ", succeeded)
 	}
+
+	// with option -leak
+	for i, tst := range tt {
+		t.Logf("\tTest %d: \t%s", i, tst.peerIp)
+		network, _ := killswitch.New(tst.peerIp)
+		network.CreatePF(true)
+
+		configFileContents := network.PFRules.String()
+
+		if !strings.Contains(configFileContents, tst.expectedVpnString) {
+			t.Fatalf("\t%s\t Should contain vpn string:  exp[%s] got[%s] ", failed, tst.expectedVpnString, configFileContents)
+		}
+		t.Logf("\t%s\t Should contain vpn string ", succeeded)
+	}
 }
