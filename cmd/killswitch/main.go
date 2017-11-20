@@ -37,7 +37,7 @@ func main() {
 		e        = flag.Bool("e", false, "`Enable` load the pf rules")
 		p        = flag.Bool("p", false, "`Print` the pf rules")
 		v        = flag.Bool("v", false, fmt.Sprintf("Print version: %s", version))
-		paranoid = flag.Bool("paranoid", false, "block icmp (ping) and any non VPN DNS requests")
+		paranoid = flag.Bool("paranoid", false, "ICMP (ping) and DNS requests only through the VPN")
 	)
 
 	flag.Parse()
