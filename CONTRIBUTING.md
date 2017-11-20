@@ -31,7 +31,7 @@ spend their free time creating things the rest the community can use.
 Don't have time to contribute? No worries, here are some other ways to show your
 support for **killswitch**:
 
-- star the [project](https://github.com/vpn-kill-switch/killswitch)
+- star :star: the [project](https://github.com/vpn-kill-switch/killswitch)
 - tweet your support for **killswitch**
 
 ## Issues
