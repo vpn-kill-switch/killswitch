@@ -5,13 +5,13 @@
   branch = "master"
   name = "github.com/miekg/dns"
   packages = [".","internal/socket"]
-  revision = "946bd9fbed05568b0f3cd188353d8aa28f38b688"
+  revision = "7994cb36eaf858ccb42fe26da404c345eca1d62d"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/net"
   packages = ["route"]
-  revision = "0a9397675ba34b2845f758fe3cd68828369c6517"
+  revision = "9dfe39835686865bff950a07b394c12a98ddc811"
 
 [solve-meta]
   analyzer-name = "dep"

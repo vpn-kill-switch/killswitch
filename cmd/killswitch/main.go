@@ -32,11 +32,12 @@ var version string
 func main() {
 
 	var (
-		ip = flag.String("ip", "", "VPN peer `IPv4`, killswitch tries to find this automatically")
-		d  = flag.Bool("d", false, "`Disable` load /etc/pf.conf rules")
-		e  = flag.Bool("e", false, "`Enable` load the pf rules")
-		p  = flag.Bool("p", false, "`Print` the pf rules")
-		v  = flag.Bool("v", false, fmt.Sprintf("Print version: %s", version))
+		ip       = flag.String("ip", "", "VPN peer `IPv4`, killswitch tries to find this automatically")
+		d        = flag.Bool("d", false, "`Disable` load /etc/pf.conf rules")
+		e        = flag.Bool("e", false, "`Enable` load the pf rules")
+		p        = flag.Bool("p", false, "`Print` the pf rules")
+		v        = flag.Bool("v", false, fmt.Sprintf("Print version: %s", version))
+		paranoid = flag.Bool("paranoid", false, "block icmp (ping) and any non VPN DNS requests")
 	)
 
 	flag.Parse()
@@ -110,7 +111,7 @@ func main() {
 		}
 	}
 
-	ks.CreatePF()
+	ks.CreatePF(*paranoid)
 
 	fmt.Printf("\n%s: %s\n", "To enable the kill switch run", killswitch.Green("sudo killswitch -e"))
 	fmt.Printf("%s: %s\n\n", "To disable", killswitch.Yellow("sudo killswitch -d"))

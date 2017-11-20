@@ -8,7 +8,7 @@ import (
 )
 
 // CreatePF creates a pf.conf
-func (n *Network) CreatePF() {
+func (n *Network) CreatePF(paranoid bool) {
 	var pass bytes.Buffer
 	n.PFRules.WriteString(fmt.Sprintf("# %s\n", strings.Repeat("-", 62)))
 	n.PFRules.WriteString(fmt.Sprintf("# %s\n", time.Now().Format(time.RFC1123Z)))
@@ -19,7 +19,9 @@ func (n *Network) CreatePF() {
 	for k := range n.UpInterfaces {
 		n.PFRules.WriteString(fmt.Sprintf("int_%s = %q\n", k, k))
 		pass.WriteString(fmt.Sprintf("pass on $int_%s proto {tcp,udp} from any port 67:68 to any port 67:68 keep state\n", k))
-		pass.WriteString(fmt.Sprintf("pass on $int_%s inet proto icmp all icmp-type 8 code 0\n", k))
+		if !paranoid {
+			pass.WriteString(fmt.Sprintf("pass on $int_%s inet proto icmp all icmp-type 8 code 0\n", k))
+		}
 		pass.WriteString(fmt.Sprintf("pass on $int_%s proto {tcp, udp} from any to $vpn_ip\n", k))
 	}
 	// create var for vpn
@@ -33,7 +35,9 @@ func (n *Network) CreatePF() {
 	n.PFRules.WriteString("set ruleset-optimization basic\n")
 	n.PFRules.WriteString("set skip on lo0\n")
 	n.PFRules.WriteString("block all\n")
-	n.PFRules.WriteString("pass quick proto {tcp, udp} from any to any port 53 keep state\n")
+	if !paranoid {
+		n.PFRules.WriteString("pass quick proto {tcp, udp} from any to any port 53 keep state\n")
+	}
 	n.PFRules.WriteString("pass from any to 255.255.255.255 keep state\n")
 	n.PFRules.WriteString("pass from 255.255.255.255 to any keep state\n")
 	n.PFRules.WriteString("pass proto udp from any to 224.0.0.0/4 keep state\n")
