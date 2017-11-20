@@ -29,7 +29,7 @@ func TestPf(t *testing.T) {
 	for i, tst := range tt {
 		t.Logf("\tTest %d: \t%s", i, tst.peerIp)
 		network, _ := killswitch.New(tst.peerIp)
-		network.CreatePF()
+		network.CreatePF(false)
 
 		configFileContents := network.PFRules.String()
 

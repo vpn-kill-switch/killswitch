@@ -5,7 +5,7 @@
   branch = "master"
   name = "github.com/miekg/dns"
   packages = [".","internal/socket"]
-  revision = "7994cb36eaf858ccb42fe26da404c345eca1d62d"
+  revision = "acff9ce3fa5f04b7abb500613e6ee80c45321c47"
 
 [[projects]]
   branch = "master"
