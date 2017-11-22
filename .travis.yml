@@ -4,8 +4,8 @@ os:
   - osx
 
 go:
-  - 1.9
-  - tip
+  - 1.9.x
+  - master
 
 before_install:
   - go get github.com/axw/gocov/gocov

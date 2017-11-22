@@ -1,12 +1,21 @@
 # killswitch
 
-Command line tool for creating a **kill switch** .pf.conf
+VPN kill switch for macOS, it will block outgoing traffic when VPN connection
+fails or crashes.
 
+https://vpn-kill-switch.com/
 
 Usage:
 
-    $ killswitch -h
+    $ killswitch
 
+To enable:
+
+    $ sudo killswitch -e
+
+To  disable:
+
+    $ sudo killswitch -d
 
 ## Compile from source
 
