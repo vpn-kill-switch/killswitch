@@ -7,6 +7,7 @@ import (
 	"github.com/vpn-kill-switch/killswitch"
 )
 
+// VPN needs to be off for testing
 func TestPf(t *testing.T) {
 	tt := []struct {
 		peerIp            string
