@@ -104,7 +104,9 @@ func main() {
 	}
 
 	if len(ks.P2PInterfaces) == 0 {
-		exit1(fmt.Errorf("No VPN interface found, verify VPN is connected"))
+		exit1(fmt.Errorf(fmt.Sprintf("\n%s",
+			killswitch.Red("No VPN interface found, verify VPN is connected")),
+		))
 	}
 
 	fmt.Printf("PEER IP address:   %s\n", killswitch.Yellow(ks.PeerIP))
