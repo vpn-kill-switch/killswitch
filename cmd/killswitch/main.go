@@ -23,7 +23,7 @@ func PadRight(str, pad string, length int) string {
 }
 
 func exit1(err error) {
-	fmt.Println(err)
+	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
 }
 
@@ -49,16 +49,23 @@ func main() {
 
 	if *d {
 		exec.Command("pfctl", "-e").CombinedOutput()
-		fmt.Printf("# %s\n", strings.Repeat("-", 62))
-		fmt.Println("# Loading /etc/pf.conf rules")
-		fmt.Printf("# %s\n", strings.Repeat("-", 62))
-		out, _ := exec.Command("pfctl",
+		_, err := exec.Command("pfctl",
 			"-Fa",
 			"-f",
 			"/etc/pf.conf").CombinedOutput()
+		if err != nil {
+			exit1(fmt.Errorf(fmt.Sprintf("%s: %s\n%s",
+				killswitch.Red("To disable use"),
+				killswitch.Yellow("sudo killswitch -d"),
+				err)),
+			)
+		}
+		out, err := exec.Command("pfctl", "-sr").CombinedOutput()
+		if err != nil {
+			exit1(err)
+		}
 		fmt.Printf("%s\n", out)
-		out, _ = exec.Command("pfctl", "-sr").CombinedOutput()
-		fmt.Printf("%s\n", out)
+		fmt.Println(killswitch.Yellow("killswitch disabled"))
 		return
 	}
 
@@ -96,9 +103,6 @@ func main() {
 		}
 	}
 
-	// add some space
-	println()
-
 	if len(ks.P2PInterfaces) == 0 {
 		exit1(fmt.Errorf("No VPN interface found, verify VPN is connected"))
 	}
@@ -113,8 +117,10 @@ func main() {
 
 	ks.CreatePF(*leak)
 
-	fmt.Printf("\n%s: %s\n", "To enable the kill switch run", killswitch.Green("sudo killswitch -e"))
-	fmt.Printf("%s: %s\n\n", "To disable", killswitch.Yellow("sudo killswitch -d"))
+	if !*e {
+		fmt.Printf("\n%s: %s\n", "To enable the kill switch run", killswitch.Green("sudo killswitch -e"))
+		fmt.Printf("%s: %s\n", "To disable", killswitch.Yellow("sudo killswitch -d"))
+	}
 
 	if *p {
 		fmt.Printf("PF rules to be loaded:\n")
@@ -129,17 +135,26 @@ func main() {
 	}
 
 	if *e {
-		fmt.Printf("# %s\n", strings.Repeat("-", 62))
-		fmt.Println("# Loading rules")
-		fmt.Printf("# %s\n", strings.Repeat("-", 62))
-		out, _ := exec.Command("pfctl", "-e").CombinedOutput()
-		fmt.Printf("%s\n", out)
-		out, _ = exec.Command("pfctl",
+		exec.Command("pfctl", "-e").CombinedOutput()
+		_, err := exec.Command("pfctl",
 			"-Fa",
 			"-f",
 			"/tmp/killswitch.pf.conf").CombinedOutput()
+		if err != nil {
+			exit1(fmt.Errorf(fmt.Sprintf("\n%s: %s\n%s",
+				killswitch.Red("To enable use"),
+				killswitch.Green("sudo killswitch -e"),
+				err)),
+			)
+		}
+		fmt.Printf("\n# %s\n", strings.Repeat("-", 62))
+		fmt.Println("# Loading rules")
+		fmt.Printf("# %s\n", strings.Repeat("-", 62))
+		out, err := exec.Command("pfctl", "-sr").CombinedOutput()
+		if err != nil {
+			exit1(err)
+		}
 		fmt.Printf("%s\n", out)
-		out, _ = exec.Command("pfctl", "-sr").CombinedOutput()
-		fmt.Printf("%s\n", out)
+		fmt.Println(killswitch.Green("killswitch enabled"))
 	}
 }
