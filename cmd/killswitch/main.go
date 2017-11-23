@@ -143,10 +143,9 @@ func main() {
 			"-f",
 			"/tmp/killswitch.pf.conf").CombinedOutput()
 		if err != nil {
-			exit1(fmt.Errorf(fmt.Sprintf("\n%s: %s\n%s",
-				killswitch.Red("To enable use"),
-				killswitch.Green("sudo killswitch -e"),
-				err)),
+			exit1(fmt.Errorf(fmt.Sprintf("\n%s: %s",
+				killswitch.Red("Kill switch is not enable, to enable use"),
+				killswitch.Green("sudo killswitch -e"))),
 			)
 		}
 		fmt.Printf("\n# %s\n", strings.Repeat("-", 62))
