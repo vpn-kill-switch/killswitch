@@ -1,34 +1,31 @@
 // Created by cgo -godefs - DO NOT EDIT
-// cgo -godefs defs_netbsd.go
+// cgo -godefs defs_darwin.go
 
 package socket
 
 const (
 	sysAF_UNSPEC = 0x0
 	sysAF_INET   = 0x2
-	sysAF_INET6  = 0x18
+	sysAF_INET6  = 0x1e
 
 	sysSOCK_RAW = 0x3
 )
 
 type iovec struct {
 	Base *byte
-	Len  uint32
+	Len  uint64
 }
 
 type msghdr struct {
 	Name       *byte
 	Namelen    uint32
+	Pad_cgo_0  [4]byte
 	Iov        *iovec
 	Iovlen     int32
+	Pad_cgo_1  [4]byte
 	Control    *byte
 	Controllen uint32
 	Flags      int32
-}
-
-type mmsghdr struct {
-	Hdr msghdr
-	Len uint32
 }
 
 type cmsghdr struct {
@@ -55,9 +52,8 @@ type sockaddrInet6 struct {
 }
 
 const (
-	sizeofIovec   = 0x8
-	sizeofMsghdr  = 0x1c
-	sizeofMmsghdr = 0x20
+	sizeofIovec   = 0x10
+	sizeofMsghdr  = 0x30
 	sizeofCmsghdr = 0xc
 
 	sizeofSockaddrInet  = 0x10
