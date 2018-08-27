@@ -4,7 +4,9 @@ os:
   - osx
 
 go:
-  - 1.9.x
+  - "1.9"
+  - "1.10"
+  - "1.11"
   - master
 
 before_install:

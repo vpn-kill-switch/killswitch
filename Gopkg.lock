@@ -2,22 +2,27 @@
 
 
 [[projects]]
+  digest = "1:463e4140189f8194f9121ca1c7fe3b8e9e9a2ab3d949b43c835c21034927dc62"
   name = "github.com/miekg/dns"
   packages = ["."]
-  revision = "83c435cc65d2862736428b9b4d07d0ab10ad3e4d"
-  version = "v1.0.5"
+  pruneopts = "UT"
+  revision = "5a2b9fab83ff0f8bfc99684bd5f43a37abe560f1"
+  version = "v1.0.8"
 
 [[projects]]
   branch = "master"
+  digest = "1:d5891c5bca9c62e5d394ca26491d2b710a1dc08cedeb0ca8f9ac4c3305120b02"
   name = "golang.org/x/crypto"
   packages = [
     "ed25519",
-    "ed25519/internal/edwards25519"
+    "ed25519/internal/edwards25519",
   ]
-  revision = "b2aa35443fbc700ab74c586ae79b81c171851023"
+  pruneopts = "UT"
+  revision = "614d502a4dac94afa3a6ce146bd1736da82514c6"
 
 [[projects]]
   branch = "master"
+  digest = "1:6d0bd20cbfbb843ee65831a64af6da27a63fd5d080c508223ae0c15305a1cb55"
   name = "golang.org/x/net"
   packages = [
     "bpf",
@@ -25,13 +30,17 @@
     "internal/socket",
     "ipv4",
     "ipv6",
-    "route"
+    "route",
   ]
-  revision = "61147c48b25b599e5b561d2e9c4f3e1ef489ca41"
+  pruneopts = "UT"
+  revision = "8a410e7b638dca158bf9e766925842f6651ff828"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "2fa920f72178f4aa6c7cff67455ee6e3da524dffc30076b95d53b03461f1d7ea"
+  input-imports = [
+    "github.com/miekg/dns",
+    "golang.org/x/net/route",
+  ]
   solver-name = "gps-cdcl"
   solver-version = 1
