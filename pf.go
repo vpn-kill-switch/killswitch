@@ -8,7 +8,7 @@ import (
 )
 
 // CreatePF creates a pf.conf
-func (n *Network) CreatePF(leak bool) {
+func (n *Network) CreatePF(leak bool, local bool) {
 	var pass bytes.Buffer
 	n.PFRules.WriteString(fmt.Sprintf("# %s\n", strings.Repeat("-", 62)))
 	n.PFRules.WriteString(fmt.Sprintf("# %s\n", time.Now().Format(time.RFC1123Z)))
@@ -21,6 +21,9 @@ func (n *Network) CreatePF(leak bool) {
 		pass.WriteString(fmt.Sprintf("pass on $int_%s proto {tcp,udp} from any port 67:68 to any port 67:68 keep state\n", k))
 		if leak {
 			pass.WriteString(fmt.Sprintf("pass on $int_%s inet proto icmp all icmp-type 8 code 0\n", k))
+		}
+		if local {
+			pass.WriteString(fmt.Sprintf("pass from $int_%s:network to $int_%s:network\n", k, k))
 		}
 		pass.WriteString(fmt.Sprintf("pass on $int_%s proto {tcp, udp} from any to $vpn_ip\n", k))
 	}
