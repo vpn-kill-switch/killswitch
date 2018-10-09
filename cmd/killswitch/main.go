@@ -30,7 +30,6 @@ func exit1(err error) {
 var version string
 
 func main() {
-
 	var (
 		ip   = flag.String("ip", "", "VPN peer `IPv4`, killswitch tries to find this automatically")
 		d    = flag.Bool("d", false, "`Disable` load /etc/pf.conf rules")

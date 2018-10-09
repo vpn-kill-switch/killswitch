@@ -3,6 +3,7 @@ package killswitch
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"net"
 )
 
@@ -72,6 +73,11 @@ func (n *Network) GetActive() error {
 				n.P2PInterfaces[i.Name] = []string{i.HardwareAddr.String(), ip.String()}
 			} else {
 				n.UpInterfaces[i.Name] = []string{i.HardwareAddr.String(), ip.String()}
+				fmt.Printf("ip.String() = %+v\n", ip.String())
+				fmt.Printf("(%s)\n", ip.DefaultMask())
+				mask := ip.DefaultMask()
+				prefixSize, _ := mask.Size()
+				fmt.Printf("prefixSize = %+v\n", prefixSize)
 			}
 		}
 	}
