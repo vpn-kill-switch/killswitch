@@ -72,12 +72,11 @@ func (n *Network) GetActive() error {
 			if i.Flags&net.FlagPointToPoint != 0 {
 				n.P2PInterfaces[i.Name] = []string{i.HardwareAddr.String(), ip.String()}
 			} else {
-				n.UpInterfaces[i.Name] = []string{i.HardwareAddr.String(), ip.String()}
-				fmt.Printf("ip.String() = %+v\n", ip.String())
-				fmt.Printf("(%s)\n", ip.DefaultMask())
+				// get mask
 				mask := ip.DefaultMask()
 				prefixSize, _ := mask.Size()
-				fmt.Printf("prefixSize = %+v\n", prefixSize)
+				n.UpInterfaces[i.Name] = []string{i.HardwareAddr.String(), fmt.Sprintf("%s/%d", ip.String(), prefixSize)}
+
 			}
 		}
 	}
