@@ -37,7 +37,7 @@ func main() {
 		p     = flag.Bool("p", false, "`Print` the pf rules")
 		v     = flag.Bool("v", false, fmt.Sprintf("Print version: %s", version))
 		leak  = flag.Bool("leak", false, "Allow ICMP (ping) and DNS requests outside VPN")
-		local = flag.Bool("local", false, "Allow local traffic")
+		local = flag.Bool("local", false, "Allow local network traffic")
 	)
 
 	flag.Parse()

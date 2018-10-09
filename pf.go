@@ -8,7 +8,7 @@ import (
 )
 
 // CreatePF creates a pf.conf
-func (n *Network) CreatePF(leak bool, local bool) {
+func (n *Network) CreatePF(leak, local bool) {
 	var pass bytes.Buffer
 	n.PFRules.WriteString(fmt.Sprintf("# %s\n", strings.Repeat("-", 62)))
 	n.PFRules.WriteString(fmt.Sprintf("# %s\n", time.Now().Format(time.RFC1123Z)))
