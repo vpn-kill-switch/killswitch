@@ -30,7 +30,7 @@ func TestPf(t *testing.T) {
 	for i, tst := range tt {
 		t.Logf("\tTest %d: \t%s", i, tst.peerIp)
 		network, _ := killswitch.New(tst.peerIp)
-		network.CreatePF(false, false)
+		network.CreatePF(false, false, false)
 
 		configFileContents := network.PFRules.String()
 
@@ -44,7 +44,7 @@ func TestPf(t *testing.T) {
 	for i, tst := range tt {
 		t.Logf("\tTest %d: \t%s", i, tst.peerIp)
 		network, _ := killswitch.New(tst.peerIp)
-		network.CreatePF(true, false)
+		network.CreatePF(true, false, false)
 
 		configFileContents := network.PFRules.String()
 
@@ -58,7 +58,7 @@ func TestPf(t *testing.T) {
 	for i, tst := range tt {
 		t.Logf("\tTest %d: \t%s", i, tst.peerIp)
 		network, _ := killswitch.New(tst.peerIp)
-		network.CreatePF(false, true)
+		network.CreatePF(false, true, false)
 
 		configFileContents := network.PFRules.String()
 
@@ -68,11 +68,11 @@ func TestPf(t *testing.T) {
 		t.Logf("\t%s\t Should contain vpn string ", succeeded)
 	}
 
-	// with options -leak -local
+	// with option -airdrop
 	for i, tst := range tt {
 		t.Logf("\tTest %d: \t%s", i, tst.peerIp)
 		network, _ := killswitch.New(tst.peerIp)
-		network.CreatePF(true, true)
+		network.CreatePF(false, false, true)
 
 		configFileContents := network.PFRules.String()
 

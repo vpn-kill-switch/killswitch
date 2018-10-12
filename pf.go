@@ -8,7 +8,7 @@ import (
 )
 
 // CreatePF creates a pf.conf
-func (n *Network) CreatePF(leak, local bool) {
+func (n *Network) CreatePF(leak, local, airdrop bool) {
 	var pass bytes.Buffer
 	n.PFRules.WriteString(fmt.Sprintf("# %s\n", strings.Repeat("-", 62)))
 	n.PFRules.WriteString(fmt.Sprintf("# %s\n", time.Now().Format(time.RFC1123Z)))
@@ -45,5 +45,8 @@ func (n *Network) CreatePF(leak, local bool) {
 	n.PFRules.WriteString("pass from 255.255.255.255 to any keep state\n")
 	n.PFRules.WriteString("pass proto udp from any to 224.0.0.0/4 keep state\n")
 	n.PFRules.WriteString("pass proto udp from 224.0.0.0/4 to any keep state\n")
+	if airdrop {
+		n.PFRules.WriteString("pass on awdl0 all\n")
+	}
 	n.PFRules.WriteString(pass.String())
 }
