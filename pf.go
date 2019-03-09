@@ -38,6 +38,7 @@ func (n *Network) CreatePF(leak, local bool) {
 	n.PFRules.WriteString("set ruleset-optimization basic\n")
 	n.PFRules.WriteString("set skip on lo0\n")
 	n.PFRules.WriteString("block all\n")
+	n.PFRules.WriteString("block out quick inet6 all\n")
 	if leak {
 		n.PFRules.WriteString("pass quick proto {tcp, udp} from any to any port 53 keep state\n")
 	}

@@ -41,11 +41,17 @@ func WhoamiDNS() (string, error) {
 func WhoamiWWW() (string, error) {
 	client := &http.Client{}
 	// Create request
-	req, err := http.NewRequest("GET", "http://checkip.amazonaws.com/", nil)
+	req, _ := http.NewRequest("GET", "http://myip.country/ip", nil)
+	req.Header.Set("User-Agent", "killswitch")
 	// Fetch Request
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		req, _ = http.NewRequest("GET", "http://checkip.amazonaws.com/", nil)
+		req.Header.Set("User-Agent", "killswitch")
+		resp, err = client.Do(req)
+		if err != nil {
+			return "", err
+		}
 	}
 	// Read Response Body
 	respBody, _ := ioutil.ReadAll(resp.Body)
