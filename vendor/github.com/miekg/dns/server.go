@@ -3,7 +3,6 @@
 package dns
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
@@ -67,7 +66,6 @@ type ConnectionStater interface {
 }
 
 type response struct {
-	msg            []byte
 	closed         bool // connection has been closed
 	hijacked       bool // connection has been hijacked by handler
 	tsigTimersOnly bool
@@ -235,6 +233,9 @@ func (srv *Server) init() {
 	}
 	if srv.MsgAcceptFunc == nil {
 		srv.MsgAcceptFunc = DefaultMsgAcceptFunc
+	}
+	if srv.Handler == nil {
+		srv.Handler = DefaultServeMux
 	}
 
 	srv.udpPool.New = makeUDPBuffer(srv.UDPSize)
@@ -430,7 +431,7 @@ func (srv *Server) serveTCP(l net.Listener) error {
 		srv.conns[rw] = struct{}{}
 		srv.lock.Unlock()
 		wg.Add(1)
-		go srv.serve(&response{tsigSecret: srv.TsigSecret, tcp: rw}, &wg)
+		go srv.serveTCPConn(&wg, rw)
 	}
 
 	return nil
@@ -475,24 +476,19 @@ func (srv *Server) serveUDP(l *net.UDPConn) error {
 			continue
 		}
 		wg.Add(1)
-		go srv.serve(&response{msg: m, tsigSecret: srv.TsigSecret, udp: l, udpSession: s}, &wg)
+		go srv.serveUDPPacket(&wg, m, l, s)
 	}
 
 	return nil
 }
 
-func (srv *Server) serve(w *response, wg *sync.WaitGroup) {
+// Serve a new TCP connection.
+func (srv *Server) serveTCPConn(wg *sync.WaitGroup, rw net.Conn) {
+	w := &response{tsigSecret: srv.TsigSecret, tcp: rw}
 	if srv.DecorateWriter != nil {
 		w.writer = srv.DecorateWriter(w)
 	} else {
 		w.writer = w
-	}
-
-	if w.udp != nil {
-		// serve UDP
-		srv.serveDNS(w)
-		wg.Done()
-		return
 	}
 
 	reader := Reader(defaultReader{srv})
@@ -513,14 +509,13 @@ func (srv *Server) serve(w *response, wg *sync.WaitGroup) {
 	}
 
 	for q := 0; (q < limit || limit == -1) && srv.isStarted(); q++ {
-		var err error
-		w.msg, err = reader.ReadTCP(w.tcp, timeout)
+		m, err := reader.ReadTCP(w.tcp, timeout)
 		if err != nil {
 			// TODO(tmthrgd): handle error
 			break
 		}
-		srv.serveDNS(w)
-		if w.tcp == nil {
+		srv.serveDNS(m, w)
+		if w.closed {
 			break // Close() was called
 		}
 		if w.hijacked {
@@ -542,15 +537,21 @@ func (srv *Server) serve(w *response, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-func (srv *Server) disposeBuffer(w *response) {
-	if w.udp != nil && cap(w.msg) == srv.UDPSize {
-		srv.udpPool.Put(w.msg[:srv.UDPSize])
+// Serve a new UDP request.
+func (srv *Server) serveUDPPacket(wg *sync.WaitGroup, m []byte, u *net.UDPConn, s *SessionUDP) {
+	w := &response{tsigSecret: srv.TsigSecret, udp: u, udpSession: s}
+	if srv.DecorateWriter != nil {
+		w.writer = srv.DecorateWriter(w)
+	} else {
+		w.writer = w
 	}
-	w.msg = nil
+
+	srv.serveDNS(m, w)
+	wg.Done()
 }
 
-func (srv *Server) serveDNS(w *response) {
-	dh, off, err := unpackMsgHdr(w.msg, 0)
+func (srv *Server) serveDNS(m []byte, w *response) {
+	dh, off, err := unpackMsgHdr(m, 0)
 	if err != nil {
 		// Let client hang, they are sending crap; any reply can be used to amplify.
 		return
@@ -559,26 +560,32 @@ func (srv *Server) serveDNS(w *response) {
 	req := new(Msg)
 	req.setHdr(dh)
 
-	switch srv.MsgAcceptFunc(dh) {
+	switch action := srv.MsgAcceptFunc(dh); action {
 	case MsgAccept:
-	case MsgIgnore:
-		return
-	case MsgReject:
+		if req.unpack(dh, m, off) == nil {
+			break
+		}
+
+		fallthrough
+	case MsgReject, MsgRejectNotImplemented:
+		opcode := req.Opcode
 		req.SetRcodeFormatError(req)
+		req.Zero = false
+		if action == MsgRejectNotImplemented {
+			req.Opcode = opcode
+			req.Rcode = RcodeNotImplemented
+		}
+
 		// Are we allowed to delete any OPT records here?
 		req.Ns, req.Answer, req.Extra = nil, nil, nil
 
 		w.WriteMsg(req)
-		srv.disposeBuffer(w)
-		return
-	}
+		fallthrough
+	case MsgIgnore:
+		if w.udp != nil && cap(m) == srv.UDPSize {
+			srv.udpPool.Put(m[:srv.UDPSize])
+		}
 
-	if err := req.unpack(dh, w.msg, off); err != nil {
-		req.SetRcodeFormatError(req)
-		req.Ns, req.Answer, req.Extra = nil, nil, nil
-
-		w.WriteMsg(req)
-		srv.disposeBuffer(w)
 		return
 	}
 
@@ -586,7 +593,7 @@ func (srv *Server) serveDNS(w *response) {
 	if w.tsigSecret != nil {
 		if t := req.IsTsig(); t != nil {
 			if secret, ok := w.tsigSecret[t.Hdr.Name]; ok {
-				w.tsigStatus = TsigVerify(w.msg, secret, "", false)
+				w.tsigStatus = TsigVerify(m, secret, "", false)
 			} else {
 				w.tsigStatus = ErrSecret
 			}
@@ -595,14 +602,11 @@ func (srv *Server) serveDNS(w *response) {
 		}
 	}
 
-	srv.disposeBuffer(w)
-
-	handler := srv.Handler
-	if handler == nil {
-		handler = DefaultServeMux
+	if w.udp != nil && cap(m) == srv.UDPSize {
+		srv.udpPool.Put(m[:srv.UDPSize])
 	}
 
-	handler.ServeDNS(w, req) // Writes back to the client
+	srv.Handler.ServeDNS(w, req) // Writes back to the client
 }
 
 func (srv *Server) readTCP(conn net.Conn, timeout time.Duration) ([]byte, error) {
@@ -616,36 +620,16 @@ func (srv *Server) readTCP(conn net.Conn, timeout time.Duration) ([]byte, error)
 	}
 	srv.lock.RUnlock()
 
-	l := make([]byte, 2)
-	n, err := conn.Read(l)
-	if err != nil || n != 2 {
-		if err != nil {
-			return nil, err
-		}
-		return nil, ErrShortRead
+	var length uint16
+	if err := binary.Read(conn, binary.BigEndian, &length); err != nil {
+		return nil, err
 	}
-	length := binary.BigEndian.Uint16(l)
-	if length == 0 {
-		return nil, ErrShortRead
+
+	m := make([]byte, length)
+	if _, err := io.ReadFull(conn, m); err != nil {
+		return nil, err
 	}
-	m := make([]byte, int(length))
-	n, err = conn.Read(m[:int(length)])
-	if err != nil || n == 0 {
-		if err != nil {
-			return nil, err
-		}
-		return nil, ErrShortRead
-	}
-	i := n
-	for i < int(length) {
-		j, err := conn.Read(m[i:int(length)])
-		if err != nil {
-			return nil, err
-		}
-		i += j
-	}
-	n = i
-	m = m[:n]
+
 	return m, nil
 }
 
@@ -702,18 +686,14 @@ func (w *response) Write(m []byte) (int, error) {
 	case w.udp != nil:
 		return WriteToSessionUDP(w.udp, m, w.udpSession)
 	case w.tcp != nil:
-		lm := len(m)
-		if lm < 2 {
-			return 0, io.ErrShortBuffer
-		}
-		if lm > MaxMsgSize {
+		if len(m) > MaxMsgSize {
 			return 0, &Error{err: "message too large"}
 		}
-		l := make([]byte, 2, 2+lm)
-		binary.BigEndian.PutUint16(l, uint16(lm))
-		m = append(l, m...)
 
-		n, err := io.Copy(w.tcp, bytes.NewReader(m))
+		l := make([]byte, 2)
+		binary.BigEndian.PutUint16(l, uint16(len(m)))
+
+		n, err := (&net.Buffers{l, m}).WriteTo(w.tcp)
 		return int(n), err
 	default:
 		panic("dns: internal error: udp and tcp both nil")
