@@ -1,7 +1,7 @@
 # killswitch
 
-VPN kill switch for macOS, it will block outgoing traffic when VPN connection
-fails or crashes.
+VPN kill switch for macOS (Mac OS X >= 10.6), it will block outgoing traffic
+when VPN connection fails or crashes.
 
 https://vpn-kill-switch.com/
 
@@ -25,15 +25,11 @@ For example using $HOME/go for your workspace
 
     $ export GOPATH=$HOME/go
 
-Create the directory:
-
-    $ mkdir -p $HOME/go/src/github.com/vpn-kill-switch
-
 Clone project into that directory:
 
-    $ git clone git@github.com:vpn-kill-switch/killswitch.git $HOME/go/src/github.com/vpn-kill-switch/killswitch
+    $ go get github.com/vpn-kill-switch/killswitch
 
 Build by just typing make:
 
-    $ cd $HOME/go/src/github.com/vpn-kill-switch/killswitch
+    $ cd $GOPATH/src/github.com/vpn-kill-switch/killswitch
     $ make
