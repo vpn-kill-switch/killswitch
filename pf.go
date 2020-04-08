@@ -18,7 +18,7 @@ func (n *Network) CreatePF(leak, local bool) {
 	// create var for interfaces
 	for k := range n.UpInterfaces {
 		n.PFRules.WriteString(fmt.Sprintf("int_%s = %q\n", k, k))
-		pass.WriteString(fmt.Sprintf("pass on $int_%s proto {tcp,udp} from any port 67:68 to any port 67:68 keep state\n", k))
+		pass.WriteString(fmt.Sprintf("pass on $int_%s proto udp from any port 67:68 to any port 67:68\n", k))
 		if leak {
 			pass.WriteString(fmt.Sprintf("pass on $int_%s inet proto icmp all icmp-type 8 code 0\n", k))
 		}
