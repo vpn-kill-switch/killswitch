@@ -1,0 +1,4 @@
+#!/bin/bash 
+
+# Enable Kill Switch
+echo <User/Sudo_Password> | sudo -S killswitch -e
