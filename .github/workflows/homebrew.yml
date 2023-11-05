@@ -7,7 +7,7 @@ jobs:
     name: Bump Homebrew formula
     runs-on: macos-latest
     steps:
-      - uses: mislav/bump-homebrew-formula-action@v1
+      - uses: mislav/bump-homebrew-formula-action@v3.1
         with:
           # A PR will be sent to github.com/Homebrew/homebrew-core to update this formula:
           formula-name: killswitch
