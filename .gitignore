@@ -1,6 +1,3 @@
-killswitch
-!*killswitch/
-coverage.out
-.goxc.local.json
-.goxc.json
-build
+/target/
+**/*.rs.bk
+.envrc

@@ -1,0 +1,21 @@
+[package]
+name = "killswitch"
+version = "0.7.3"
+authors = ["Nicolas Embriz <nbari@tequila.io>"]
+description = "VPN kill switch for macOS"
+documentation = "https://killswitch.network"
+homepage = "https://killswitch.network"
+repository = "https://github.com/vpn-kill-switch/killswitch"
+readme = "README.md"
+keywords = ["killswitch", "cli", "network", "vpn", "macos"]
+categories = ["command-line-interface", "command-line-utilities"]
+license = "BSD-3-Clause"
+edition = "2018"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["string", "env"] }
+openssl = { version = "0.10", features = ["vendored"] }
+
+[package.metadata]
+publish = "vpn-kill-switch"
