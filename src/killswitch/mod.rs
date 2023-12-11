@@ -44,5 +44,22 @@ pub fn default() -> Result<String> {
         println!("{} - ips:{:#?} ", x.network_interface.name, x.ips);
     }
 
+    match default_net::get_default_gateway() {
+        Ok(gateway) => println!("gateway: {:#?}", gateway),
+        Err(e) => println!("Error: {}", e),
+    }
+
+    match default_net::get_default_interface() {
+        Ok(interface) => println!("interface: {:#?}", interface),
+        Err(e) => println!("Error: {}", e),
+    }
+
+    let interfaces = default_net::get_interfaces();
+    for interface in interfaces {
+        if interface.is_point_to_point() {
+            println!("interface: {:#?}", interface);
+        }
+    }
+
     Ok("".to_string())
 }
