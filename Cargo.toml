@@ -16,6 +16,7 @@ edition = "2018"
 anyhow = "1"
 clap = { version = "4", features = ["string", "env"] }
 openssl = { version = "0.10", features = ["vendored"] }
+pnet = "0.34.0"
 
 [package.metadata]
 publish = "vpn-kill-switch"
