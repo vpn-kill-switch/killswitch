@@ -29,12 +29,20 @@ pub fn default() -> Result<String> {
         }
 
         println!(
-            "  MAC Address: {:>width$}",
+            "  MAC Address: {}",
             interface
                 .mac_addr
                 .map_or("N/A".to_string(), |m| format!("{}", m)),
-            width = 8
         );
+
+        println!(
+            "  Gateway: {}",
+            interface
+                .gateway
+                .map_or("N/A".to_string(), |m| format!("{:#?}", m.ip_addr)),
+        );
+
+        println!("  Type: {:?}", interface.if_type);
     }
 
     println!("");
