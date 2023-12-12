@@ -1,21 +1,29 @@
+---
 version: 2
 workflows:
   version: 2
-  test:
-    jobs:
-      - test-latest
-      - test-1.11
+
 jobs:
-  test-latest: &test-template
+  build:
     docker:
-      - image: circleci/golang:latest
-    working_directory: /go/src/github.com/vpn-kill-switch/killswitch
+      - image: cimg/rust:1.74
     steps:
       - checkout
-      - run: curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-      - run: dep ensure -vendor-only
-      - run: go test -race -v
-  test-1.11:
-    <<: *test-template
-    docker:
-      - image: circleci/golang:1.11
+
+      - run: cargo --version
+
+      - run:
+          name: Format
+          run: cargo fmt --all -- --check
+
+      - run:
+          name: Clippy
+          run: cargo clippy -- -D clippy::all -D clippy::nursery -D warnings
+
+      - run:
+          name: Check
+          run: cargo check
+
+      - run:
+          name: test
+          run: cargo test
