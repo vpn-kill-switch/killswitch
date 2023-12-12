@@ -8,7 +8,6 @@ use std::net::IpAddr;
 pub fn default() -> Result<String> {
     if let Ok(interface) = default_net::get_default_interface() {
         println!("Default network interface");
-        println!("");
         println!("  Name: {}", interface.name);
 
         let ipv4 = interface.ipv4.iter().map(|ip| ip).collect::<Vec<_>>();
