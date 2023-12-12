@@ -2,9 +2,12 @@
 version: 2
 workflows:
   version: 2
+  test:
+    jobs:
+      - test
 
 jobs:
-  build:
+  test:
     docker:
       - image: cimg/rust:1.74
     steps:
