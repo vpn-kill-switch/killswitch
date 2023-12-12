@@ -14,16 +14,16 @@ jobs:
 
       - run:
           name: Format
-          run: cargo fmt --all -- --check
+          command: cargo fmt --all -- --check
 
       - run:
           name: Clippy
-          run: cargo clippy -- -D clippy::all -D clippy::nursery -D warnings
+          command: cargo clippy -- -D clippy::all -D clippy::nursery -D warnings
 
       - run:
           name: Check
-          run: cargo check
+          command: cargo check
 
       - run:
           name: test
-          run: cargo test
+          command: cargo test
