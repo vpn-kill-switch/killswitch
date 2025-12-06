@@ -1,6 +1,6 @@
 [package]
 name = "killswitch"
-version = "0.7.3"
+version = "0.8.0"
 authors = ["Nicolas Embriz <nbari@tequila.io>"]
 description = "VPN kill switch for macOS"
 documentation = "https://killswitch.network"
@@ -10,12 +10,42 @@ readme = "README.md"
 keywords = ["killswitch", "cli", "network", "vpn", "macos"]
 categories = ["command-line-interface", "command-line-utilities"]
 license = "BSD-3-Clause"
-edition = "2018"
+edition = "2024"
+
+[lints.rust]
+warnings = "deny"
+
+[lints.clippy]
+# Allow unstable/opinionated lints (lower priority so individual lints can override)
+nursery = { level = "allow", priority = -1 }
+
+# Enforce pedantic lints
+pedantic = "deny"
+
+# Core lint groups
+all = "deny"
+correctness = "deny"
+suspicious = "deny"
+perf = "deny"
+complexity = "deny"
+
+# Safety-critical lints
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+await_holding_lock = "deny"
+
+# Performance + memory reliability
+needless_borrow = "deny"
+needless_collect = "deny"
+large_stack_arrays = "deny"
 
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["string", "env"] }
-openssl = { version = "0.10", features = ["vendored"] }
+libc = "0.2"
+nix = { version = "0.30", features = ["net"] }
 
 [package.metadata]
 publish = "vpn-kill-switch"
