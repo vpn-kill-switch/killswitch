@@ -1,5 +1,5 @@
 use crate::cli::telemetry::Verbosity;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use std::net::IpAddr;
 use std::process::Command;
 
@@ -26,7 +26,7 @@ mod bsd_routing {
 }
 
 #[cfg(target_os = "macos")]
-use bsd_routing::*;
+use bsd_routing::{CTL_NET, NET_RT_FLAGS, PF_ROUTE, RTF_GATEWAY, RTF_STATIC, RTF_UP, UGSC, UGSH};
 
 /// Detect VPN gateway by reading routing table via sysctl
 /// This finds the remote VPN server endpoint, not the local peer address
@@ -66,7 +66,7 @@ fn detect_vpn_gateway_sysctl(verbose: Verbosity) -> Result<String> {
     #[cfg(target_os = "macos")]
     {
         // MIB for sysctl: CTL_NET, PF_ROUTE, 0, AF_INET, NET_RT_FLAGS, RTF_UP|RTF_GATEWAY|RTF_STATIC
-        let mib: [i32; 6] = [
+        let mut mib: [i32; 6] = [
             CTL_NET,
             PF_ROUTE,
             0,
@@ -75,15 +75,20 @@ fn detect_vpn_gateway_sysctl(verbose: Verbosity) -> Result<String> {
             RTF_UP | RTF_GATEWAY | RTF_STATIC,
         ];
 
+        let mib_len: u32 = mib
+            .len()
+            .try_into()
+            .map_err(|_| anyhow!("mib length does not fit into u32"))?;
+
         // First call: get size
         let mut len: libc::size_t = 0;
         let ret = unsafe {
             libc::sysctl(
-                mib.as_ptr(),
-                mib.len() as u32,
+                mib.as_mut_ptr(),
+                mib_len,
                 ptr::null_mut(),
-                &mut len,
-                ptr::null(),
+                &raw mut len,
+                ptr::null_mut(),
                 0,
             )
         };
@@ -102,11 +107,11 @@ fn detect_vpn_gateway_sysctl(verbose: Verbosity) -> Result<String> {
         // Second call: read data
         let ret = unsafe {
             libc::sysctl(
-                mib.as_ptr(),
-                mib.len() as u32,
-                buf.as_mut_ptr() as *mut libc::c_void,
-                &mut len,
-                ptr::null(),
+                mib.as_mut_ptr(),
+                mib_len,
+                buf.as_mut_ptr().cast::<libc::c_void>(),
+                &raw mut len,
+                ptr::null_mut(),
                 0,
             )
         };
@@ -116,11 +121,14 @@ fn detect_vpn_gateway_sysctl(verbose: Verbosity) -> Result<String> {
         }
 
         if verbose.is_debug() {
-            eprintln!("  Read {} bytes from routing table", len);
+            eprintln!("  Read {len} bytes from routing table");
         }
 
         // Parse the routing table messages
-        return parse_routing_table(&buf[..len], verbose);
+        let data = buf
+            .get(..len)
+            .context("sysctl returned a length larger than the buffer")?;
+        parse_routing_table(data, verbose)
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -135,40 +143,42 @@ fn detect_vpn_gateway_sysctl(verbose: Verbosity) -> Result<String> {
 #[allow(clippy::cast_ptr_alignment)] // We're carefully handling alignment
 fn parse_routing_table(data: &[u8], verbose: Verbosity) -> Result<String> {
     let mut offset = 0;
-    
+
     while offset + 4 <= data.len() {
         // Read message length (first 2 bytes)
-        if offset + 2 > data.len() {
+        let Some(msglen_bytes) = data.get(offset..offset + 2) else {
             break;
-        }
-        
-        let msglen = u16::from_ne_bytes([data[offset], data[offset + 1]]) as usize;
-        
+        };
+        let Ok(msglen_bytes) = <[u8; 2]>::try_from(msglen_bytes) else {
+            break;
+        };
+        let msglen = u16::from_ne_bytes(msglen_bytes) as usize;
+
         if msglen == 0 || offset + msglen > data.len() {
             break;
         }
 
         // Read flags (at offset 12-15 in rt_msghdr)
-        if offset + 16 > data.len() {
+        let Some(flags_bytes) = data.get(offset + 12..offset + 16) else {
             offset += msglen;
             continue;
-        }
-
-        let flags = i32::from_ne_bytes([
-            data[offset + 12],
-            data[offset + 13],
-            data[offset + 14],
-            data[offset + 15],
-        ]);
+        };
+        let Ok(flags_bytes) = <[u8; 4]>::try_from(flags_bytes) else {
+            offset += msglen;
+            continue;
+        };
+        let flags = i32::from_ne_bytes(flags_bytes);
 
         // Check if this route matches UGSH or UGSc
         if (flags & UGSH == UGSH) || (flags & UGSC == UGSC) {
             if verbose.is_debug() {
-                eprintln!("  Found route with UGSH/UGSc flags: 0x{:x}", flags);
+                eprintln!("  Found route with UGSH/UGSc flags: 0x{flags:x}");
             }
 
             // Parse sockaddrs to extract gateway
-            if let Some(gateway) = extract_gateway_from_msg(&data[offset..offset + msglen], verbose) {
+            if let Some(msg) = data.get(offset..offset + msglen)
+                && let Some(gateway) = extract_gateway_from_msg(msg, verbose)
+            {
                 if is_vpn_gateway(&gateway) {
                     return Ok(gateway);
                 } else if verbose.is_debug() {
@@ -186,6 +196,10 @@ fn parse_routing_table(data: &[u8], verbose: Verbosity) -> Result<String> {
 /// Extract gateway IP from routing message
 #[cfg(target_os = "macos")]
 fn extract_gateway_from_msg(msg: &[u8], verbose: Verbosity) -> Option<String> {
+    // RTA_* flags
+    const RTA_DST: i32 = 0x1;
+    const RTA_GATEWAY: i32 = 0x2;
+
     // rt_msghdr structure:
     // 0-1: msglen
     // 2: version
@@ -201,12 +215,9 @@ fn extract_gateway_from_msg(msg: &[u8], verbose: Verbosity) -> Option<String> {
         return None;
     }
 
-    let addrs = i32::from_ne_bytes([msg[8], msg[9], msg[10], msg[11]]);
-    
-    // RTA_GATEWAY = 0x2 (second bit)
-    const RTA_DST: i32 = 0x1;
-    const RTA_GATEWAY: i32 = 0x2;
-    
+    let addrs_bytes = msg.get(8..12)?;
+    let addrs = i32::from_ne_bytes(<[u8; 4]>::try_from(addrs_bytes).ok()?);
+
     if addrs & RTA_GATEWAY == 0 {
         return None; // No gateway in this message
     }
@@ -214,14 +225,15 @@ fn extract_gateway_from_msg(msg: &[u8], verbose: Verbosity) -> Option<String> {
     // Find where sockaddrs start (after rt_msghdr)
     // rt_msghdr is typically 92 bytes on macOS
     let mut sa_offset = 92;
-    
+
     if sa_offset >= msg.len() {
         return None;
     }
 
     // Skip DST sockaddr if present
     if addrs & RTA_DST != 0 {
-        if let Some(len) = get_sockaddr_len(&msg[sa_offset..]) {
+        let sa = msg.get(sa_offset..)?;
+        if let Some(len) = get_sockaddr_len(sa) {
             sa_offset += align_sockaddr(len);
         } else {
             return None;
@@ -233,16 +245,14 @@ fn extract_gateway_from_msg(msg: &[u8], verbose: Verbosity) -> Option<String> {
         return None;
     }
 
-    extract_ipv4_from_sockaddr(&msg[sa_offset..], verbose)
+    let sa = msg.get(sa_offset..)?;
+    extract_ipv4_from_sockaddr(sa, verbose)
 }
 
 /// Get sockaddr length
 #[cfg(target_os = "macos")]
 fn get_sockaddr_len(sa: &[u8]) -> Option<usize> {
-    if sa.is_empty() {
-        return None;
-    }
-    Some(sa[0] as usize)
+    sa.first().copied().map(|len| len as usize)
 }
 
 /// Align sockaddr to 4-byte boundary
@@ -254,15 +264,12 @@ fn align_sockaddr(len: usize) -> usize {
 /// Extract IPv4 address from sockaddr
 #[cfg(target_os = "macos")]
 fn extract_ipv4_from_sockaddr(sa: &[u8], verbose: Verbosity) -> Option<String> {
-    if sa.len() < 2 {
-        return None;
-    }
-
-    let _sa_len = sa[0] as usize;
-    let sa_family = sa[1];
+    let sa_len = sa.first().copied().map(|len| len as usize)?;
+    let sa_family = sa.get(1).copied()?;
 
     // AF_INET = 2
-    if sa_family != libc::AF_INET as u8 {
+    let af_inet_u8 = u8::try_from(libc::AF_INET).ok()?;
+    if sa_family != af_inet_u8 {
         return None;
     }
 
@@ -271,12 +278,13 @@ fn extract_ipv4_from_sockaddr(sa: &[u8], verbose: Verbosity) -> Option<String> {
     // 1: family (1 byte)
     // 2-3: port (2 bytes)
     // 4-7: addr (4 bytes)
-    
-    if sa.len() < 8 {
+
+    if sa_len < 8 || sa.len() < 8 {
         return None;
     }
 
-    let addr = Ipv4Addr::new(sa[4], sa[5], sa[6], sa[7]);
+    let bytes = <[u8; 4]>::try_from(sa.get(4..8)?).ok()?;
+    let addr = Ipv4Addr::new(bytes[0], bytes[1], bytes[2], bytes[3]);
     let ip_str = addr.to_string();
 
     if verbose.is_debug() {
@@ -362,11 +370,11 @@ fn detect_vpn_peer_from_ifconfig(verbose: Verbosity) -> Result<String> {
 /// Format: "Destination  Gateway  Flags  Refs  Use  Netif Expire"
 fn extract_gateway(line: &str) -> Option<String> {
     let parts: Vec<&str> = line.split_whitespace().collect();
-    
+
     // netstat output format:
     // [0]=Destination [1]=Gateway [2]=Flags [3]=Refs [4]=Use [5]=Netif [6]=Expire
     let gateway = parts.get(1)?;
-    
+
     // Validate it's an IP address
     if gateway.parse::<IpAddr>().is_ok() {
         Some((*gateway).to_string())
@@ -454,7 +462,7 @@ mod tests {
         // Typical netstat line
         let line = "52.1.2.3   10.8.0.1   UGSH   1   0   utun0";
         assert_eq!(extract_gateway(line), Some("10.8.0.1".to_string()));
-        
+
         let line2 = "default   192.168.1.1   UGSc   2   0   en0";
         assert_eq!(extract_gateway(line2), Some("192.168.1.1".to_string()));
     }
@@ -487,19 +495,13 @@ mod tests {
     #[test]
     fn test_extract_peer_address_arrow() {
         let line = "\tinet 10.8.0.2 --> 10.8.0.1 netmask 0xffffffff";
-        assert_eq!(
-            extract_peer_address(line),
-            Some("10.8.0.1".to_string())
-        );
+        assert_eq!(extract_peer_address(line), Some("10.8.0.1".to_string()));
     }
 
     #[test]
     fn test_extract_peer_address_peer() {
         let line = "\tinet 192.168.1.2 peer 192.168.1.1 netmask 0xffffff00";
-        assert_eq!(
-            extract_peer_address(line),
-            Some("192.168.1.1".to_string())
-        );
+        assert_eq!(extract_peer_address(line), Some("192.168.1.1".to_string()));
     }
 
     #[test]

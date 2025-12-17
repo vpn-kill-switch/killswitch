@@ -78,7 +78,7 @@ mod tests {
             local: false,
             verbose: Verbosity::Normal,
         };
-        
+
         // Should succeed without root
         let result = execute(&action);
         assert!(result.is_ok());
@@ -93,7 +93,7 @@ mod tests {
             local: true,
             verbose: Verbosity::Normal,
         };
-        
+
         let result = execute(&action);
         assert!(result.is_ok());
     }
@@ -107,7 +107,7 @@ mod tests {
             local: false,
             verbose: Verbosity::Normal,
         };
-        
+
         // Should fail without root (unless running as root)
         let result = execute(&action);
         let euid = unsafe { libc::geteuid() };
@@ -123,7 +123,7 @@ mod tests {
         let action = Action::Disable {
             verbose: Verbosity::Normal,
         };
-        
+
         let result = execute(&action);
         let euid = unsafe { libc::geteuid() };
         if euid != 0 {

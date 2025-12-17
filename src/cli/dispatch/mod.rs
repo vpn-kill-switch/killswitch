@@ -1,5 +1,5 @@
 use crate::cli::{actions::Action, telemetry::Verbosity};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::ArgMatches;
 
 /// Convert CLI arguments to an Action

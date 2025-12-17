@@ -3,7 +3,7 @@ mod pf;
 mod rules;
 
 use crate::cli::telemetry::Verbosity;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 fn check_root() -> Result<()> {
     let euid = unsafe { libc::geteuid() };
@@ -41,11 +41,11 @@ pub fn enable(leak: bool, local: bool, ipv4: Option<&str>, verbose: Verbosity) -
     }
 
     let rules_content = rules::generate(&vpn_ip, leak, local, verbose)?;
-    
+
     if verbose.is_debug() {
         eprintln!("  Applying rules to pf...");
     }
-    
+
     pf::apply_rules(&rules_content, verbose)?;
 
     Ok(())

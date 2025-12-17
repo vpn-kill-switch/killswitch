@@ -1,6 +1,6 @@
 use clap::{
-    builder::styling::{AnsiColor, Effects, Styles},
     Arg, ArgAction, ColorChoice, Command,
+    builder::styling::{AnsiColor, Effects, Styles},
 };
 
 #[must_use]

@@ -1,5 +1,5 @@
 use crate::cli::telemetry::Verbosity;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -21,8 +21,8 @@ pub fn apply_rules(rules: &str, verbose: Verbosity) -> Result<()> {
     }
 
     // Write rules to file
-    let mut file = fs::File::create(PF_RULES_PATH)
-        .context("Failed to create killswitch rules file")?;
+    let mut file =
+        fs::File::create(PF_RULES_PATH).context("Failed to create killswitch rules file")?;
     file.write_all(rules.as_bytes())
         .context("Failed to write rules")?;
 
@@ -42,13 +42,12 @@ pub fn apply_rules(rules: &str, verbose: Verbosity) -> Result<()> {
     if verbose.is_verbose() {
         eprintln!("  Firewall rules applied");
     }
-    
+
     Ok(())
 }
 
 fn ensure_anchor_in_conf(verbose: Verbosity) -> Result<()> {
-    let conf_content = fs::read_to_string(PF_CONF)
-        .context("Failed to read pf.conf")?;
+    let conf_content = fs::read_to_string(PF_CONF).context("Failed to read pf.conf")?;
 
     let anchor_line = format!("anchor \"{PF_ANCHOR}\"");
     let load_anchor_line = format!("load anchor \"{PF_ANCHOR}\" from \"{PF_RULES_PATH}\"");
@@ -66,8 +65,7 @@ fn ensure_anchor_in_conf(verbose: Verbosity) -> Result<()> {
 
     // Backup original conf
     let backup_path = format!("{PF_CONF}.backup");
-    fs::copy(PF_CONF, &backup_path)
-        .context("Failed to backup pf.conf")?;
+    fs::copy(PF_CONF, &backup_path).context("Failed to backup pf.conf")?;
 
     // Add anchor lines if not present
     let mut new_content = conf_content.clone();
@@ -75,7 +73,9 @@ fn ensure_anchor_in_conf(verbose: Verbosity) -> Result<()> {
     if !conf_content.contains(&anchor_line) {
         // Add anchor line after the last existing anchor or at the beginning
         if let Some(pos) = conf_content.rfind("anchor") {
-            let line_end = conf_content[pos..].find('\n').map_or(conf_content.len(), |i| pos + i + 1);
+            let line_end = conf_content[pos..]
+                .find('\n')
+                .map_or(conf_content.len(), |i| pos + i + 1);
             new_content.insert_str(line_end, &format!("{anchor_line}\n"));
         } else {
             new_content.insert_str(0, &format!("{anchor_line}\n"));
@@ -85,7 +85,9 @@ fn ensure_anchor_in_conf(verbose: Verbosity) -> Result<()> {
     if !conf_content.contains(&load_anchor_line) {
         // Add load anchor line after the last existing load anchor or at the end
         if let Some(pos) = conf_content.rfind("load anchor") {
-            let line_end = conf_content[pos..].find('\n').map_or(conf_content.len(), |i| pos + i + 1);
+            let line_end = conf_content[pos..]
+                .find('\n')
+                .map_or(conf_content.len(), |i| pos + i + 1);
             new_content.insert_str(line_end, &format!("{load_anchor_line}\n"));
         } else {
             new_content.push('\n');
@@ -94,13 +96,12 @@ fn ensure_anchor_in_conf(verbose: Verbosity) -> Result<()> {
         }
     }
 
-    fs::write(PF_CONF, new_content)
-        .context("Failed to write updated pf.conf")?;
+    fs::write(PF_CONF, new_content).context("Failed to write updated pf.conf")?;
 
     if verbose.is_debug() {
         eprintln!("  pf.conf updated");
     }
-    
+
     Ok(())
 }
 
@@ -122,7 +123,7 @@ fn load_anchor(verbose: Verbosity) -> Result<()> {
     if verbose.is_debug() {
         eprintln!("  Anchor loaded");
     }
-    
+
     Ok(())
 }
 
@@ -147,7 +148,7 @@ fn enable_pf(verbose: Verbosity) -> Result<()> {
     if verbose.is_debug() {
         eprintln!("  pf enabled");
     }
-    
+
     Ok(())
 }
 
@@ -171,14 +172,13 @@ pub fn disable(verbose: Verbosity) -> Result<()> {
         if verbose.is_debug() {
             eprintln!("  Removing rules file");
         }
-        fs::remove_file(PF_RULES_PATH)
-            .context("Failed to remove rules file")?;
+        fs::remove_file(PF_RULES_PATH).context("Failed to remove rules file")?;
     }
 
     if verbose.is_verbose() {
         eprintln!("  Firewall rules removed");
     }
-    
+
     Ok(())
 }
 

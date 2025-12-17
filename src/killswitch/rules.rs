@@ -5,9 +5,7 @@ use std::net::IpAddr;
 use std::process::Command;
 
 pub fn generate(vpn_peer: &str, leak: bool, local: bool, verbose: Verbosity) -> Result<String> {
-    let vpn_peer_ip: IpAddr = vpn_peer
-        .parse()
-        .context("Invalid VPN peer IP address")?;
+    let vpn_peer_ip: IpAddr = vpn_peer.parse().context("Invalid VPN peer IP address")?;
 
     if verbose.is_debug() {
         eprintln!("  VPN peer: {vpn_peer_ip}");
@@ -46,7 +44,7 @@ pub fn generate(vpn_peer: &str, leak: bool, local: bool, verbose: Verbosity) -> 
                 writeln!(rules, "pass out quick to {network}")?;
             }
             rules.push('\n');
-            
+
             if verbose.is_debug() {
                 eprintln!("  Local networks: {}", local_networks.join(", "));
             }
@@ -159,9 +157,6 @@ mod tests {
     #[test]
     fn test_extract_network() {
         let line = "\tinet 192.168.1.100 netmask 0xffffff00 broadcast 192.168.1.255";
-        assert_eq!(
-            extract_network(line),
-            Some("192.168.1.100/24".to_string())
-        );
+        assert_eq!(extract_network(line), Some("192.168.1.100/24".to_string()));
     }
 }
