@@ -11,8 +11,6 @@ keywords = ["killswitch", "vpn", "firewall", "network", "macos"]
 categories = ["command-line-utilities", "network-programming", "os::macos-apis"]
 license = "BSD-3-Clause"
 edition = "2024"
-rust-version = "1.85"
-exclude = [".github/", ".justfile", "AGENTS.md"]
 
 [lib]
 name = "killswitch"
