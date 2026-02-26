@@ -1,3 +1,29 @@
-/target/
+debug
+target
 **/*.rs.bk
 .envrc
+.DS_Store
+
+# Editor/IDE artifacts
+flycheck_*
+flycheck*.rs
+.flycheck_*
+
+# test artifacts
+/tests/tmp/
+*.db
+
+# Ai tools
+.claude/
+.copilot/
+.cursor/
+.idea/
+.vscode/
+.opencode/
+.codexrc
+CLAUDE.md
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo

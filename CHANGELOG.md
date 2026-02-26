@@ -1,3 +1,7 @@
+## 0.8.0
+* Rewrite from Go to Rust
+* VPN gateway detection via sysctl, netstat, scutil, and ifconfig fallbacks
+
 ## 0.7.2
 * allow only UDP for DHCP (removed TCP option since is not used)
 

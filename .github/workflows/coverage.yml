@@ -2,34 +2,65 @@
 name: Coverage
 
 on:
-  push:
-    branches-ignore:
-      - 'develop'
-      - 'main'
+  workflow_call:
+    secrets:
+      CODECOV_TOKEN:
+        required: true
 
 jobs:
   coverage:
     name: Coverage
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: actions/checkout@v5
+
+      - name: Cache Rust toolchain and dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-coverage-
+            ${{ runner.os }}-cargo-
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
 
       - name: Run tests
-        run: cargo test --verbose -- --nocapture
+        run: cargo test --verbose
         env:
           RUST_BACKTRACE: full
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code
-            -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests
-          RUSTDOCFLAGS: -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code
-            -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests
+          CARGO_INCREMENTAL: 0
+          LLVM_PROFILE_FILE: coverage-%p-%m.profraw
+          RUSTFLAGS: -Cinstrument-coverage -Ccodegen-units=1 -Clink-dead-code -Coverflow-checks=off
+          RUSTDOCFLAGS: -Cinstrument-coverage -Ccodegen-units=1 -Clink-dead-code -Coverflow-checks=off
 
-      - name: rust-grcov
-        uses: actions-rs/grcov@v0.1
+      - name: Install grcov
+        run: |
+          if [[ ! -e ~/.cargo/bin/grcov ]]; then
+            cargo install grcov
+          else
+            echo "grcov already installed"
+          fi
+
+      - name: Run grcov
+        run: grcov . --binary-path target/debug/ -s . -t lcov --branch --ignore-not-existing
+          --ignore '../**' --ignore '/*' -o coverage.lcov
 
       - name: Upload to codecov.io
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          files: coverage.lcov
+          flags: rust
 
       - name: Coveralls GitHub Action
         uses: coverallsapp/github-action@v2

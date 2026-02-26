@@ -1,21 +1,62 @@
 [package]
-name = "killswitch"
-version = "0.7.3"
+name = "vpn-kill-switch"
+version = "0.8.0"
 authors = ["Nicolas Embriz <nbari@tequila.io>"]
 description = "VPN kill switch for macOS"
 documentation = "https://killswitch.network"
 homepage = "https://killswitch.network"
 repository = "https://github.com/vpn-kill-switch/killswitch"
 readme = "README.md"
-keywords = ["killswitch", "cli", "network", "vpn", "macos"]
-categories = ["command-line-interface", "command-line-utilities"]
+keywords = ["killswitch", "vpn", "firewall", "network", "macos"]
+categories = ["command-line-utilities", "network-programming", "os::macos-apis"]
 license = "BSD-3-Clause"
-edition = "2018"
+edition = "2024"
+rust-version = "1.85"
+exclude = [".github/", ".justfile", "AGENTS.md"]
+
+[lib]
+name = "killswitch"
+
+[lints.rust]
+warnings = "deny"
+
+[lints.clippy]
+# Allow unstable/opinionated lints (lower priority so individual lints can override)
+nursery = { level = "allow", priority = -1 }
+
+# Enforce pedantic lints
+pedantic = "deny"
+
+# Core lint groups
+all = "deny"
+correctness = "deny"
+suspicious = "deny"
+perf = "deny"
+complexity = "deny"
+
+# Safety-critical lints
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+await_holding_lock = "deny"
+
+# Performance + memory reliability
+needless_borrow = "deny"
+needless_collect = "deny"
+large_stack_arrays = "deny"
 
 [dependencies]
 anyhow = "1"
+chrono = { version = "0.4.44", default-features = false, features = ["clock"] }
 clap = { version = "4", features = ["string", "env"] }
-openssl = { version = "0.10", features = ["vendored"] }
+libc = "0.2"
+nix = { version = "0.31", features = ["net"] }
 
-[package.metadata]
-publish = "vpn-kill-switch"
+[build-dependencies]
+built = { version = "0.8.0", features = ["git2"] }
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"

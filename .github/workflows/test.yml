@@ -18,9 +18,9 @@ on:
 jobs:
   format:
     name: Format
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.branch }}
       - uses: dtolnay/rust-toolchain@stable
@@ -30,74 +30,27 @@ jobs:
 
   lint:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.branch }}
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Clippy
-        run: cargo clippy -- -D clippy::all -D clippy::nursery -D warnings
-
-  check:
-    name: Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Check
-        run: cargo check
+        run: cargo clippy --all-targets --all-features
 
   test:
     name: Test
-    strategy:
-      matrix:
-        os:
-          - ubuntu-latest
-          - macOS-latest
-        rust:
-          - stable
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
     needs:
       - format
       - lint
-      - check
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.branch }}
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: test
+      - name: Test
         run: cargo test
-
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
-      - uses: dtolnay/rust-toolchain@nightly
-
-      - name: Run tests
-        run: cargo test --verbose
-        env:
-          CARGO_INCREMENTAL: '0'
-          RUSTFLAGS: -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code
-            -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests
-          RUSTDOCFLAGS: -Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code
-            -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests
-
-      - name: rust-grcov
-        uses: actions-rs/grcov@v0.1
-
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v3
-
-      - name: Coveralls GitHub Action
-        uses: coverallsapp/github-action@v2

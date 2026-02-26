@@ -18,23 +18,21 @@ jobs:
 
   build:
     name: Build and release
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-latest
     needs: test
 
     strategy:
       matrix:
         include:
-          - build: linux
-            os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-
-          - build: macos
-            os: macos-latest
+          - build: macos-x86_64
             target: x86_64-apple-darwin
+
+          - build: macos-aarch64
+            target: aarch64-apple-darwin
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Get the release version from the tag
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
@@ -44,9 +42,6 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - run: sudo apt -y install musl-dev musl-tools
-        if: matrix.build == 'linux'
-
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
 
@@ -54,28 +49,27 @@ jobs:
         shell: bash
         run: |
           binary_name="killswitch"
-
           dirname="$binary_name-${{ env.VERSION }}-${{ matrix.target }}"
           mkdir "$dirname"
-            mv "target/${{ matrix.target }}/release/$binary_name" "$dirname"
-            tar -czf "$dirname.tar.gz" "$dirname"
-            echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
+          mv "target/${{ matrix.target }}/release/$binary_name" "$dirname"
+          tar -czf "$dirname.tar.gz" "$dirname"
+          echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |-
             ${{ env.ASSET }}
 
   publish:
     name: Publish
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     needs:
       - build
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -93,7 +87,6 @@ jobs:
       - name: bump-homebrew-formula
         uses: mislav/bump-homebrew-formula-action@v3.1
         with:
-          # A PR will be sent to github.com/Homebrew/homebrew-core to update this formula:
           formula-name: killswitch
         env:
           COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
