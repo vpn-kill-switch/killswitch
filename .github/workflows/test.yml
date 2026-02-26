@@ -7,10 +7,7 @@ on:
       branch:
         required: true
         type: string
-        default: develop
-  push:
-    branches:
-      - '*'
+        default: main
   pull_request:
     branches:
       - '*'
