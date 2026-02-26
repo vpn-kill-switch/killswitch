@@ -10,7 +10,7 @@ on:
         default: develop
   push:
     branches:
-      - main
+      - '*'
   pull_request:
     branches:
       - '*'
