@@ -490,12 +490,12 @@ fn hex_to_cidr(hex: &str) -> Option<u8> {
 /// Get the public IP address by querying an external HTTP service
 pub fn get_public_ip() -> Result<String> {
     for url in ["https://trackip.net/ip", "https://checkip.amazonaws.com"] {
-        if let Ok(output) = Command::new("curl").args(["-s", "-m", "5", url]).output() {
-            if output.status.success() {
-                let ip = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if ip.parse::<IpAddr>().is_ok() {
-                    return Ok(ip);
-                }
+        if let Ok(output) = Command::new("curl").args(["-s", "-m", "5", url]).output()
+            && output.status.success()
+        {
+            let ip = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if ip.parse::<IpAddr>().is_ok() {
+                return Ok(ip);
             }
         }
     }
