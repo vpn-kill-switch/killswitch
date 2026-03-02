@@ -5,6 +5,22 @@ mod rules;
 use crate::cli::verbosity::Verbosity;
 use anyhow::{Context, Result, bail};
 
+/// Check if an IP address is in a private/reserved range (RFC 1918, loopback, link-local)
+#[must_use]
+pub fn is_private_ip(ip: &std::net::Ipv4Addr) -> bool {
+    let o = ip.octets();
+    // 10.0.0.0/8
+    o[0] == 10
+        // 172.16.0.0/12
+        || (o[0] == 172 && (16..=31).contains(&o[1]))
+        // 192.168.0.0/16
+        || (o[0] == 192 && o[1] == 168)
+        // 127.0.0.0/8 (loopback)
+        || o[0] == 127
+        // 169.254.0.0/16 (link-local)
+        || (o[0] == 169 && o[1] == 254)
+}
+
 fn check_root() -> Result<()> {
     let euid = unsafe { libc::geteuid() };
     if euid != 0 {
@@ -19,13 +35,7 @@ fn validate_ipv4(ip: &str) -> Result<()> {
     let IpAddr::V4(v4) = addr else {
         bail!("IPv6 addresses are not supported: {ip}");
     };
-    let o = v4.octets();
-    if o[0] == 10
-        || (o[0] == 172 && (16..=31).contains(&o[1]))
-        || (o[0] == 192 && o[1] == 168)
-        || o[0] == 127
-        || (o[0] == 169 && o[1] == 254)
-    {
+    if is_private_ip(&v4) {
         bail!("{ip} is a private/reserved IP address. VPN peer must be a public IP");
     }
     Ok(())
@@ -91,6 +101,7 @@ pub fn disable(verbose: Verbosity) -> Result<()> {
 ///
 /// # Errors
 /// Returns an error if the firewall status cannot be queried
+#[must_use = "status returns the current state which should be displayed or checked"]
 pub fn status() -> Result<String> {
     pf::status()
 }
@@ -129,10 +140,16 @@ pub fn show_interfaces(verbose: Verbosity) -> Result<String> {
     let mut out = String::new();
     let _ = writeln!(out, "Interface  MAC address         IP");
 
-    let has_vpn = interfaces.iter().any(|i| i.is_p2p);
+    let has_vpn = interfaces.iter().any(network::InterfaceInfo::is_p2p);
 
     for iface in &interfaces {
-        let _ = writeln!(out, "{:<10} {:<19} {}", iface.name, iface.mac, iface.ip);
+        let _ = writeln!(
+            out,
+            "{:<10} {:<19} {}",
+            iface.name(),
+            iface.mac(),
+            iface.ip()
+        );
     }
 
     // Show public IP

@@ -30,10 +30,10 @@ pub fn generate(vpn_peer: &str, leak: bool, local: bool, verbose: Verbosity) -> 
 
     // Interface macros
     for iface in &interfaces {
-        if iface.is_p2p {
-            writeln!(rules, "vpn_{} = \"{}\"", iface.name, iface.name)?;
+        if iface.is_p2p() {
+            writeln!(rules, "vpn_{} = \"{}\"", iface.name(), iface.name())?;
         } else {
-            writeln!(rules, "int_{} = \"{}\"", iface.name, iface.name)?;
+            writeln!(rules, "int_{} = \"{}\"", iface.name(), iface.name())?;
         }
     }
     writeln!(rules, "vpn_ip = \"{vpn_peer_ip}\"")?;
@@ -70,38 +70,38 @@ pub fn generate(vpn_peer: &str, leak: bool, local: bool, verbose: Verbosity) -> 
     rules.push('\n');
 
     // Per physical interface rules
-    for iface in interfaces.iter().filter(|i| !i.is_p2p) {
+    for iface in interfaces.iter().filter(|i| !i.is_p2p()) {
         if leak {
             writeln!(
                 rules,
                 "# Allow ping\npass on $int_{} inet proto icmp all icmp-type 8 code 0 keep state",
-                iface.name
+                iface.name()
             )?;
             rules.push('\n');
         }
         writeln!(
             rules,
             "# Allow dhcp\npass on $int_{} proto {{tcp,udp}} from any port 67:68 to any port 67:68 keep state",
-            iface.name
+            iface.name()
         )?;
         rules.push('\n');
         if local {
             writeln!(
                 rules,
                 "pass from $int_{0}:network to $int_{0}:network",
-                iface.name
+                iface.name()
             )?;
         }
         writeln!(
             rules,
             "# use only the vpn\npass on $int_{} proto {{tcp, udp}} from any to $vpn_ip",
-            iface.name
+            iface.name()
         )?;
     }
 
     // VPN interface pass-all
-    for iface in interfaces.iter().filter(|i| i.is_p2p) {
-        writeln!(rules, "pass on $vpn_{} all", iface.name)?;
+    for iface in interfaces.iter().filter(|i| i.is_p2p()) {
+        writeln!(rules, "pass on $vpn_{} all", iface.name())?;
     }
 
     Ok(rules)
@@ -110,6 +110,7 @@ pub fn generate(vpn_peer: &str, leak: bool, local: bool, verbose: Verbosity) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::killswitch::network::hex_to_cidr;
 
     fn extract_network(line: &str) -> Option<String> {
         let parts: Vec<&str> = line.split_whitespace().collect();
@@ -119,12 +120,6 @@ mod tests {
         let netmask_hex = parts.get(netmask_pos + 1)?;
         let cidr = hex_to_cidr(netmask_hex)?;
         Some(format!("{ip}/{cidr}"))
-    }
-
-    fn hex_to_cidr(hex: &str) -> Option<u8> {
-        let hex = hex.strip_prefix("0x")?;
-        let value = u32::from_str_radix(hex, 16).ok()?;
-        u8::try_from(value.count_ones()).ok()
     }
 
     #[allow(clippy::unwrap_used)]

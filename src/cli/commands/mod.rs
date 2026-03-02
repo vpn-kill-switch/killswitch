@@ -2,11 +2,14 @@ use clap::{
     Arg, ArgAction, ColorChoice, Command,
     builder::styling::{AnsiColor, Effects, Styles},
 };
+use std::sync::OnceLock;
 
 pub mod built_info {
     #![allow(clippy::doc_markdown)]
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
+
+static LONG_VERSION: OnceLock<String> = OnceLock::new();
 
 #[must_use]
 pub fn new() -> Command {
@@ -16,9 +19,10 @@ pub fn new() -> Command {
         .literal(AnsiColor::Blue.on_default() | Effects::BOLD)
         .placeholder(AnsiColor::Green.on_default());
 
-    let git_hash = built_info::GIT_COMMIT_HASH.unwrap_or("unknown");
-    let long_version: &'static str =
-        Box::leak(format!("{} - {}", env!("CARGO_PKG_VERSION"), git_hash).into_boxed_str());
+    let long_version: &str = LONG_VERSION.get_or_init(|| {
+        let git_hash = built_info::GIT_COMMIT_HASH.unwrap_or("unknown");
+        format!("{} - {git_hash}", env!("CARGO_PKG_VERSION"))
+    });
 
     Command::new(env!("CARGO_PKG_NAME"))
         .about(env!("CARGO_PKG_DESCRIPTION"))

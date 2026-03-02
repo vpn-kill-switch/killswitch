@@ -1,3 +1,9 @@
+## 0.8.1
+* Improved VPN peer IP detection (added WireGuard and Tailscale support)
+* Fixed memory leak in CLI version string
+* Refactored network detection for better reliability
+* Added comprehensive test script
+
 ## 0.8.0
 * Rewrite from Go to Rust
 * VPN gateway detection via sysctl, netstat, scutil, and ifconfig fallbacks
