@@ -1,3 +1,6 @@
+## 0.8.2
+* Fixed VPN peer detection to resolve hostnames (thanks @chrismazanec)
+
 ## 0.8.1
 * Improved VPN peer IP detection (added WireGuard and Tailscale support)
 * Fixed memory leak in CLI version string
