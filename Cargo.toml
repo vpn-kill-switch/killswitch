@@ -1,6 +1,6 @@
 [package]
 name = "vpn-kill-switch"
-version = "0.8.1"
+version = "0.8.2"
 authors = ["Nicolas Embriz <nbari@tequila.io>"]
 description = "VPN kill switch for macOS"
 documentation = "https://killswitch.network"
