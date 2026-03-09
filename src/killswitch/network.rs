@@ -8,7 +8,7 @@
 use crate::cli::verbosity::Verbosity;
 use crate::killswitch::is_private_ip;
 use anyhow::{Context, Result, bail};
-use std::net::IpAddr;
+use std::net::{IpAddr, ToSocketAddrs};
 use std::process::Command;
 
 // ============================================================================
@@ -228,24 +228,78 @@ fn detect_peer_from_scutil(verbose: Verbosity) -> Result<String> {
 
         let detail = String::from_utf8_lossy(&show_output.stdout);
 
-        // Look for "RemoteAddress : <ip>"
+        // Look for "RemoteAddress : <host>[:<port>]"
         for detail_line in detail.lines() {
             let trimmed = detail_line.trim();
-            if let Some(ip) = trimmed.strip_prefix("RemoteAddress : ") {
-                let ip = ip.trim();
-                if is_valid_vpn_peer(ip) {
-                    if verbose.is_verbose() {
-                        eprintln!("  Detected VPN peer via scutil: {ip}");
+            if let Some(raw) = trimmed.strip_prefix("RemoteAddress : ") {
+                let raw = raw.trim();
+                let host = strip_port(raw);
+
+                // Resolve hostname to IP if needed
+                let resolved = if host.parse::<IpAddr>().is_ok() {
+                    host.to_string()
+                } else {
+                    match resolve_hostname_v4(host, verbose) {
+                        Some(ip) => ip,
+                        None => continue,
                     }
-                    return Ok(ip.to_string());
+                };
+
+                if is_valid_vpn_peer(&resolved) {
+                    if verbose.is_verbose() {
+                        eprintln!("  Detected VPN peer via scutil: {resolved}");
+                    }
+                    return Ok(resolved);
                 } else if verbose.is_debug() {
-                    eprintln!("  Skipping non-public RemoteAddress: {ip}");
+                    eprintln!("  Skipping non-public RemoteAddress: {resolved}");
                 }
             }
         }
     }
 
     bail!("No VPN peer found via scutil")
+}
+
+/// Strip optional port suffix from a remote address.
+///
+/// Handles `host:port`, `ip:port`, and `[ipv6]:port` forms.
+/// Returns the bare host/IP.
+fn strip_port(raw: &str) -> &str {
+    if let Some(rest) = raw.strip_prefix('[') {
+        // [ipv6]:port — extract content between brackets
+        rest.split(']').next().unwrap_or(raw)
+    } else if raw.matches(':').count() == 1 {
+        // host:port or ipv4:port — split on the single colon
+        raw.split(':').next().unwrap_or(raw)
+    } else {
+        // bare IP, bare hostname, or bare IPv6 (multiple colons, no brackets)
+        raw
+    }
+}
+
+/// Resolve a hostname to its first IPv4 address.
+fn resolve_hostname_v4(host: &str, verbose: Verbosity) -> Option<String> {
+    if verbose.is_debug() {
+        eprintln!("  Resolving hostname: {host}");
+    }
+    match format!("{host}:0").to_socket_addrs() {
+        Ok(addrs) => {
+            if let Some(addr) = addrs.into_iter().find(std::net::SocketAddr::is_ipv4) {
+                Some(addr.ip().to_string())
+            } else {
+                if verbose.is_debug() {
+                    eprintln!("  No IPv4 address for: {host}");
+                }
+                None
+            }
+        }
+        Err(e) => {
+            if verbose.is_debug() {
+                eprintln!("  DNS resolution failed for {host}: {e}");
+            }
+            None
+        }
+    }
 }
 
 /// Extract destination IP from netstat routing table line.
@@ -591,5 +645,40 @@ mod tests {
         assert_eq!(hex_to_cidr("invalid"), None);
         assert_eq!(hex_to_cidr("ffffff00"), None); // Missing 0x prefix
         assert_eq!(hex_to_cidr(""), None);
+    }
+
+    // -------------------------------------------------------------------------
+    // Port stripping tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn test_strip_port_bare_ipv4() {
+        assert_eq!(strip_port("1.2.3.4"), "1.2.3.4");
+    }
+
+    #[test]
+    fn test_strip_port_ipv4_with_port() {
+        assert_eq!(strip_port("1.2.3.4:51820"), "1.2.3.4");
+    }
+
+    #[test]
+    fn test_strip_port_hostname_with_port() {
+        assert_eq!(strip_port("myvpn.example.com:51820"), "myvpn.example.com");
+    }
+
+    #[test]
+    fn test_strip_port_bare_hostname() {
+        assert_eq!(strip_port("myvpn.example.com"), "myvpn.example.com");
+    }
+
+    #[test]
+    fn test_strip_port_ipv6_bracketed_with_port() {
+        assert_eq!(strip_port("[::1]:51820"), "::1");
+    }
+
+    #[test]
+    fn test_strip_port_bare_ipv6() {
+        // Bare IPv6 has multiple colons, no brackets — returned as-is
+        assert_eq!(strip_port("2001:db8::1"), "2001:db8::1");
     }
 }
