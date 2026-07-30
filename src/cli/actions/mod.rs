@@ -9,6 +9,7 @@ pub enum Action {
         ipv4: Option<String>,
         leak: bool,
         local: bool,
+        reconnect: bool,
         verbose: Verbosity,
     },
     Disable {
@@ -21,6 +22,7 @@ pub enum Action {
         ipv4: Option<String>,
         leak: bool,
         local: bool,
+        reconnect: bool,
         verbose: Verbosity,
     },
     ShowInterfaces {
@@ -50,6 +52,7 @@ mod tests {
             ipv4: Some("10.8.0.1".to_string()),
             leak: false,
             local: false,
+            reconnect: false,
             verbose: Verbosity::Normal,
         };
         let debug_str = format!("{action:?}");
@@ -63,6 +66,7 @@ mod tests {
             ipv4: None,
             leak: true,
             local: true,
+            reconnect: true,
             verbose: Verbosity::Verbose,
         };
         assert!(matches!(enable, Action::Enable { .. }));
@@ -81,6 +85,7 @@ mod tests {
             ipv4: Some("192.168.1.1".to_string()),
             leak: false,
             local: false,
+            reconnect: false,
             verbose: Verbosity::Normal,
         };
         assert!(matches!(print, Action::Print { .. }));

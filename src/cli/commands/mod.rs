@@ -77,6 +77,13 @@ pub fn new() -> Command {
                 .conflicts_with_all(["disable", "status"]),
         )
         .arg(
+            Arg::new("reconnect")
+                .long("reconnect")
+                .help("Temporarily allow bounded AdGuard bootstrap sockets for reconnects")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["disable", "status"]),
+        )
+        .arg(
             Arg::new("print")
                 .short('p')
                 .long("print")
@@ -133,5 +140,11 @@ mod tests {
     fn test_verbose_count() {
         let matches = new().get_matches_from(vec!["killswitch", "-vvv"]);
         assert_eq!(matches.get_count("verbose"), 3);
+    }
+
+    #[test]
+    fn test_reconnect_flag() {
+        let matches = new().get_matches_from(vec!["killswitch", "--enable", "--reconnect"]);
+        assert!(matches.get_flag("reconnect"));
     }
 }

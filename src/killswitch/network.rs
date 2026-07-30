@@ -9,6 +9,7 @@
 use crate::cli::verbosity::Verbosity;
 use crate::killswitch::is_private_ip;
 use anyhow::{Context, Result, bail};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs as _};
 use std::process::Command;
@@ -61,6 +62,7 @@ pub struct VpnInfo {
     pub tunnel_ipv4: Option<Ipv4Addr>,
     pub tunnel_ipv6: Vec<Ipv6Addr>,
     pub endpoints: Vec<VpnEndpoint>,
+    pub bootstrap_endpoints: Vec<VpnEndpoint>,
     pub physical_interface: Option<String>,
     pub physical_ipv4: Vec<Ipv4Addr>,
     pub physical_ipv6: Vec<Ipv6Addr>,
@@ -82,6 +84,14 @@ struct InterfaceData {
     ipv4: Vec<Ipv4Addr>,
     ipv6: Vec<Ipv6Addr>,
     point_to_point: bool,
+}
+
+const MAX_ADGUARD_BOOTSTRAP_ENDPOINTS: usize = 8;
+
+#[derive(Debug, Default)]
+struct LsofEndpoints {
+    transport: Vec<VpnEndpoint>,
+    bootstrap: Vec<VpnEndpoint>,
 }
 
 /// Detect the physical path, active VPN interface and outer endpoint sockets.
@@ -204,11 +214,15 @@ fn detect_from_outputs(outputs: DetectionOutputs<'_>) -> VpnInfo {
         .as_deref()
         .and_then(|name| interfaces.iter().find(|interface| interface.name == name));
 
-    let mut endpoints = parse_lsof_endpoints(outputs.lsof, &physical_ipv4, &physical_ipv6);
+    let lsof_endpoints = parse_lsof_endpoints(outputs.lsof, &physical_ipv4, &physical_ipv6);
+    let mut endpoints = lsof_endpoints.transport;
     endpoints.extend(parse_wireguard_endpoints(outputs.wireguard));
     endpoints.extend(parse_scutil_remote_addresses(outputs.scutil));
     endpoints.sort();
     endpoints.dedup();
+    let mut bootstrap_endpoints = lsof_endpoints.bootstrap;
+    bootstrap_endpoints.sort();
+    bootstrap_endpoints.dedup();
 
     let service = parse_lsof_service(outputs.lsof);
     let vpn_type = if !outputs.wireguard.trim().is_empty() {
@@ -234,6 +248,7 @@ fn detect_from_outputs(outputs: DetectionOutputs<'_>) -> VpnInfo {
         tunnel_ipv4: active.and_then(|value| value.ipv4.first().copied()),
         tunnel_ipv6: active.map_or_else(Vec::new, |value| value.ipv6.clone()),
         endpoints,
+        bootstrap_endpoints,
         physical_interface,
         physical_ipv4,
         physical_ipv6,
@@ -379,7 +394,7 @@ fn parse_lsof_endpoints(
     input: &str,
     physical_ipv4: &[Ipv4Addr],
     physical_ipv6: &[Ipv6Addr],
-) -> Vec<VpnEndpoint> {
+) -> LsofEndpoints {
     let physical: Vec<IpAddr> = physical_ipv4
         .iter()
         .copied()
@@ -389,6 +404,7 @@ fn parse_lsof_endpoints(
     let mut command = String::new();
     let mut transport = Transport::Any;
     let mut endpoints = Vec::new();
+    let mut adguard_candidates = Vec::new();
 
     for line in input.lines() {
         let Some((tag, value)) = line.split_at_checked(1) else {
@@ -407,7 +423,7 @@ fn parse_lsof_endpoints(
                     _ => Transport::Any,
                 };
             }
-            "n" if is_vpn_process(&command) => {
+            "n" if is_vpn_transport_process(&command) => {
                 let Some((local, remote)) = value.split_once("->") else {
                     continue;
                 };
@@ -418,40 +434,86 @@ fn parse_lsof_endpoints(
                     continue;
                 };
                 if physical.contains(&local_address) && is_public_endpoint(remote_address) {
-                    endpoints.push(VpnEndpoint {
+                    let endpoint = VpnEndpoint {
                         address: remote_address,
                         port,
                         transport,
-                    });
+                    };
+                    if command.eq_ignore_ascii_case("AdGuard VPN") {
+                        adguard_candidates.push(endpoint);
+                    } else {
+                        endpoints.push(endpoint);
+                    }
                 }
             }
             _ => {}
         }
     }
-    endpoints
+    let mut adguard = select_adguard_endpoints(&adguard_candidates);
+    endpoints.append(&mut adguard.transport);
+    LsofEndpoints {
+        transport: endpoints,
+        bootstrap: adguard.bootstrap,
+    }
+}
+
+fn select_adguard_endpoints(candidates: &[VpnEndpoint]) -> LsofEndpoints {
+    let mut counts = BTreeMap::new();
+    for endpoint in candidates {
+        *counts.entry(endpoint.clone()).or_insert(0_usize) += 1;
+    }
+    let Some(maximum) = counts.values().copied().max() else {
+        return LsofEndpoints::default();
+    };
+    let mut dominant: Vec<_> = counts
+        .iter()
+        .filter_map(|(endpoint, count)| (*count == maximum).then_some(endpoint))
+        .cloned()
+        .collect();
+    // AdGuard opens one-off connectivity and DNS probe sockets on the physical
+    // interface. A unique endpoint repeated across sockets is the observable
+    // distinction between its tunnel transport and those probes.
+    if maximum < 2 || dominant.len() != 1 {
+        dominant.clear();
+    }
+    let bootstrap = counts
+        .into_keys()
+        .filter(|endpoint| !dominant.contains(endpoint))
+        .filter(|endpoint| {
+            endpoint.port == Some(443)
+                && matches!(endpoint.transport, Transport::Tcp | Transport::Udp)
+        })
+        .take(MAX_ADGUARD_BOOTSTRAP_ENDPOINTS)
+        .collect();
+    LsofEndpoints {
+        transport: dominant,
+        bootstrap,
+    }
 }
 
 fn parse_lsof_service(input: &str) -> Option<String> {
     input.lines().find_map(|line| {
         line.strip_prefix('c')
-            .filter(|name| is_vpn_process(name))
+            .filter(|name| is_vpn_service_process(name))
             .map(str::to_string)
     })
 }
 
-fn is_vpn_process(name: &str) -> bool {
+fn is_vpn_transport_process(name: &str) -> bool {
     let folded = name.to_ascii_lowercase();
-    [
-        "adguard vpn",
-        "com.adguard",
-        "wireguard",
-        "tailscale",
-        "openvpn",
-        "protonvpn",
-        "nordvpn",
-    ]
-    .iter()
-    .any(|needle| folded.contains(needle))
+    // AdGuard's Network Extension also owns proxied application sockets.  Only
+    // the app process owns the outer tunnel socket observed on the physical IP.
+    if folded == "adguard vpn" {
+        return true;
+    }
+
+    ["wireguard", "tailscale", "openvpn", "protonvpn", "nordvpn"]
+        .iter()
+        .any(|needle| folded.contains(needle))
+}
+
+fn is_vpn_service_process(name: &str) -> bool {
+    is_vpn_transport_process(name) || contains_folded(name, "com.adguard")
 }
 
 fn contains_folded(value: &str, needle: &str) -> bool {
@@ -594,17 +656,18 @@ pub fn describe(info: &VpnInfo) -> String {
 mod tests {
     use super::*;
 
+    // Public fixture addresses are from IANA documentation-only ranges.
     const EN0: &str = r"en0: flags=8863<UP,BROADCAST,RUNNING,MULTICAST> mtu 1500
     ether aa:bb:cc:dd:ee:ff
-    inet 192.168.1.66 netmask 0xffffff00 broadcast 192.168.1.255
-    inet6 2a00:1370:817c:4a82::66 prefixlen 64
+    inet 192.0.2.10 netmask 0xffffff00 broadcast 192.0.2.255
+    inet6 2001:db8:1:2::66 prefixlen 64
 ";
     const UTUN4: &str = r"utun4: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1500
     inet 172.16.209.2 --> 127.1.1.1 netmask 0xffffffff
     inet6 fd00::2 prefixlen 64
 ";
     const ROUTES4: &str = r"Destination Gateway Flags Netif Expire
-default 192.168.1.254 UGScg en0
+default 192.0.2.1 UGScg en0
 1 utun4 USc utun4
 2/7 utun4 USc utun4
 64/2 utun4 USc utun4
@@ -657,8 +720,8 @@ default 192.168.1.254 UGScg en0
         let input = format!("{EN0}{UTUN4}");
         let lsof = concat!(
             "p811\ncAdGuard VPN\nPUDP\n",
-            "n192.168.1.66:54794->216.211.192.107:443\n",
-            "n192.168.1.66:54795->216.211.192.107:443\n",
+            "n192.0.2.10:54794->198.51.100.107:443\n",
+            "n192.0.2.10:54795->198.51.100.107:443\n",
         );
         let info = detect_from_outputs(outputs(&input, ROUTES4, lsof));
         // Ephemeral source ports must not become part of the PF exception:
@@ -667,7 +730,7 @@ default 192.168.1.254 UGScg en0
         assert_eq!(
             info.endpoints.first(),
             Some(&VpnEndpoint {
-                address: IpAddr::V4(Ipv4Addr::new(216, 211, 192, 107)),
+                address: IpAddr::V4(Ipv4Addr::new(198, 51, 100, 107)),
                 port: Some(443),
                 transport: Transport::Udp,
             })
@@ -685,7 +748,7 @@ default 192.168.1.254 UGScg en0
     fn test_physical_interface_en0_and_global_addresses() {
         let info = detect_from_outputs(outputs(EN0, ROUTES4, ""));
         assert_eq!(info.physical_interface.as_deref(), Some("en0"));
-        assert_eq!(info.physical_ipv4, [Ipv4Addr::new(192, 168, 1, 66)]);
+        assert_eq!(info.physical_ipv4, [Ipv4Addr::new(192, 0, 2, 10)]);
         assert_eq!(info.physical_ipv6.len(), 1);
     }
 
@@ -707,9 +770,88 @@ default 192.168.1.254 UGScg en0
 
     #[test]
     fn test_non_vpn_process_socket_is_not_endpoint() {
-        let lsof = "p99\ncBrowser\nPTCP\nn192.168.1.66:50000->203.0.113.1:443\n";
+        let lsof = "p99\ncBrowser\nPTCP\nn192.0.2.10:50000->203.0.113.1:443\n";
         let info = detect_from_outputs(outputs(EN0, ROUTES4, lsof));
         assert!(info.endpoints.is_empty());
+    }
+
+    #[test]
+    fn test_adguard_network_extension_socket_is_not_endpoint() {
+        let input = format!("{EN0}{UTUN4}");
+        let lsof = concat!(
+            "p811\ncAdGuard VPN\nPTCP\n",
+            "n192.0.2.10:53593->198.51.100.107:443\n",
+            "n192.0.2.10:53594->198.51.100.107:443\n",
+            "p4414\nccom.adguard.mac.vpn.network-extension\nPTCP\n",
+            "n192.0.2.10:55433->203.0.113.26:443\n",
+            "n192.0.2.10:55434->203.0.113.188:5228\n",
+        );
+        let info = detect_from_outputs(outputs(&input, ROUTES4, lsof));
+
+        assert_eq!(
+            info.endpoints,
+            [VpnEndpoint {
+                address: IpAddr::V4(Ipv4Addr::new(198, 51, 100, 107)),
+                port: Some(443),
+                transport: Transport::Tcp,
+            }]
+        );
+        assert!(info.bootstrap_endpoints.is_empty());
+        assert_eq!(info.service.as_deref(), Some("AdGuard VPN"));
+    }
+
+    #[test]
+    fn test_adguard_network_extension_still_identifies_service() {
+        let lsof = "p4414\nccom.adguard.mac.vpn.network-extension\n";
+        let info = detect_from_outputs(outputs(EN0, ROUTES4, lsof));
+
+        assert_eq!(
+            info.service.as_deref(),
+            Some("com.adguard.mac.vpn.network-extension")
+        );
+        assert!(info.endpoints.is_empty());
+    }
+
+    #[test]
+    fn test_adguard_repeated_transport_excludes_one_off_probes() {
+        let input = format!("{EN0}{UTUN4}");
+        let lsof = concat!(
+            "p811\ncAdGuard VPN\nPTCP\n",
+            "n192.0.2.10:50001->198.51.100.107:443\n",
+            "n192.0.2.10:50002->198.51.100.107:443\n",
+            "n192.0.2.10:50003->203.0.113.8:443\n",
+            "n192.0.2.10:50004->203.0.113.9:443\n",
+        );
+        let info = detect_from_outputs(outputs(&input, ROUTES4, lsof));
+
+        assert_eq!(
+            info.endpoints,
+            [VpnEndpoint {
+                address: IpAddr::V4(Ipv4Addr::new(198, 51, 100, 107)),
+                port: Some(443),
+                transport: Transport::Tcp,
+            }]
+        );
+        assert_eq!(info.bootstrap_endpoints.len(), 2);
+        assert!(
+            info.bootstrap_endpoints
+                .iter()
+                .all(|endpoint| endpoint.port == Some(443))
+        );
+    }
+
+    #[test]
+    fn test_adguard_one_off_physical_sockets_are_not_endpoints() {
+        let lsof = concat!(
+            "p811\ncAdGuard VPN\nPTCP\n",
+            "n192.0.2.10:50001->203.0.113.8:443\n",
+            "n192.0.2.10:50002->203.0.113.9:443\n",
+            "n192.0.2.10:50003->203.0.113.10:80\n",
+        );
+        let info = detect_from_outputs(outputs(EN0, ROUTES4, lsof));
+
+        assert!(info.endpoints.is_empty());
+        assert_eq!(info.bootstrap_endpoints.len(), 2);
     }
 
     #[test]

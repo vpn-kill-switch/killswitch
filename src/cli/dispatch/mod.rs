@@ -19,12 +19,14 @@ pub fn handler(matches: &ArgMatches, verbose: Verbosity) -> Result<Action> {
         let ipv4 = matches.get_one::<String>("ipv4").map(String::from);
         let leak = matches.get_flag("leak");
         let local = matches.get_flag("local");
+        let reconnect = matches.get_flag("reconnect");
 
         if print {
             Ok(Action::Print {
                 ipv4,
                 leak,
                 local,
+                reconnect,
                 verbose,
             })
         } else {
@@ -32,6 +34,7 @@ pub fn handler(matches: &ArgMatches, verbose: Verbosity) -> Result<Action> {
                 ipv4,
                 leak,
                 local,
+                reconnect,
                 verbose,
             })
         }
@@ -43,10 +46,12 @@ pub fn handler(matches: &ArgMatches, verbose: Verbosity) -> Result<Action> {
         let ipv4 = matches.get_one::<String>("ipv4").map(String::from);
         let leak = matches.get_flag("leak");
         let local = matches.get_flag("local");
+        let reconnect = matches.get_flag("reconnect");
         Ok(Action::Print {
             ipv4,
             leak,
             local,
+            reconnect,
             verbose,
         })
     } else {
@@ -104,6 +109,7 @@ mod tests {
             "-e",
             "--local",
             "--leak",
+            "--reconnect",
             "--ipv4",
             "10.0.0.1",
         ]);
@@ -112,12 +118,14 @@ mod tests {
             ipv4,
             leak,
             local,
+            reconnect,
             verbose: _,
         } = action
         {
             assert_eq!(ipv4, Some("10.0.0.1".to_string()));
             assert!(leak);
             assert!(local);
+            assert!(reconnect);
         } else {
             panic!("Expected Action::Enable");
         }

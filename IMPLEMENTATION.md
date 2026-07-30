@@ -13,8 +13,8 @@ On the AdGuard VPN system used during development:
 - `utun4` owns `172.16.209.2`, `fd00::2`, and the broad VPN routes;
 - `utun0` through `utun3` have only link-local/service routes and are unrelated;
 - `scutil --nc list` does not expose the active AdGuard packet tunnel;
-- `lsof -F pcPnT` exposes `AdGuard VPN` UDP sockets from the `en0` address to
-  the current public server on port 443.
+- `lsof -F pcPnT` exposes `AdGuard VPN` transport sockets from the `en0`
+  address to the current public server.
 
 The detector therefore does not interpret the `utun` peer `127.1.1.1`, the
 tunnel address, the public exit IP, or an arbitrary static route as the outer
@@ -39,6 +39,11 @@ interface are that `utun`, plus a configured tunnel IPv4 address. A link-local
 1. known VPN-provider sockets bound to a physical interface address;
 2. `wg show all endpoints`;
 3. connected `scutil --nc show` `RemoteAddress` values.
+
+AdGuard also creates one-off physical-interface sockets for connectivity and
+DNS probes. Its endpoint selector therefore accepts only a unique remote that
+is repeated across multiple provider sockets; an ambiguous observation fails
+closed.
 
 An unknown endpoint never produces a physical-interface Internet allow rule.
 
@@ -71,11 +76,20 @@ loaded anchor; it does not flush the state table.
 ## Dynamic fail-closed behavior
 
 The monitor runs every two seconds. It replaces the tunnel allow rule after a
-route change and removes it when the VPN disappears. The last currently
-observed provider endpoints remain narrowly allowed so the provider can create
-a new tunnel. When a new blocked connection attempt changes the provider
-socket endpoint, `lsof` exposes the remote address before traffic succeeds;
-the next monitor pass replaces the endpoint rule.
+route change and removes it when the VPN disappears. Endpoint exceptions are
+detected and pinned when the kill switch is enabled, then persisted in the
+root-only runtime monitor configuration. Later direct sockets never expand
+that allowlist. This permits reconnection to the same endpoint; switching to a
+different server requires disabling and enabling the kill switch around the
+server change.
+
+The opt-in `--reconnect` mode also emits separately labeled
+`killswitch-bootstrap` rules for TCP/UDP port 443 destinations currently
+opened by the exact `AdGuard VPN` process. The monitor replaces this temporary
+set every two seconds, excludes the pinned transport endpoint, and caps it at
+eight destinations. These narrow direct exceptions let AdGuard complete its
+connectivity checks and discover a new transport endpoint without adding a
+wildcard Internet exception.
 
 The monitor keeps no wildcard physical Internet exception. A missing tunnel,
 endpoint, physical path, malformed route table, or transient detection failure

@@ -6,6 +6,7 @@ use crate::cli::verbosity::Verbosity;
 use anyhow::{Context, Result, bail};
 use network::{Transport, VpnEndpoint, VpnInfo};
 use std::collections::BTreeSet;
+use std::fmt::Write as _;
 use std::fs::{self, OpenOptions};
 use std::io::Write as _;
 use std::net::{IpAddr, Ipv4Addr};
@@ -19,23 +20,21 @@ use std::time::Duration;
 const MONITOR_CONFIG_PATH: &str = "/var/run/killswitch.monitor.conf";
 const MONITOR_PID_PATH: &str = "/var/run/killswitch.monitor.pid";
 const MONITOR_INTERVAL: Duration = Duration::from_secs(2);
+const MAX_RECONNECT_ENDPOINTS: usize = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct MonitorConfig {
     leak: bool,
     local: bool,
+    reconnect: bool,
     manual_endpoint: Option<Ipv4Addr>,
+    trusted_endpoints: Vec<VpnEndpoint>,
 }
 
 /// Check whether an IPv4 address is private or locally scoped.
 #[must_use]
 pub fn is_private_ip(ip: &Ipv4Addr) -> bool {
-    let octets = ip.octets();
-    octets[0] == 10
-        || (octets[0] == 172 && (16..=31).contains(&octets[1]))
-        || (octets[0] == 192 && octets[1] == 168)
-        || octets[0] == 127
-        || (octets[0] == 169 && octets[1] == 254)
+    ip.is_private() || ip.is_loopback() || ip.is_link_local()
 }
 
 fn check_root() -> Result<()> {
@@ -86,16 +85,24 @@ fn physical_addresses(info: &VpnInfo) -> Vec<IpAddr> {
 ///
 /// # Errors
 /// Returns an error if privileges, detection, PF validation, or monitor startup fails.
-pub fn enable(leak: bool, local: bool, ipv4: Option<&str>, verbose: Verbosity) -> Result<()> {
+pub fn enable(
+    leak: bool,
+    local: bool,
+    reconnect: bool,
+    ipv4: Option<&str>,
+    verbose: Verbosity,
+) -> Result<()> {
     check_root()?;
     let info = detect_with_override(ipv4, verbose)?;
-    let generated = rules::generate(&info, leak, local)?;
+    let generated = rules::generate(&info, leak, local, reconnect)?;
     pf::apply_rules(&generated, &physical_addresses(&info), true, verbose)?;
 
     let config = MonitorConfig {
         leak,
         local,
+        reconnect,
         manual_endpoint: ipv4.map(validate_manual_endpoint).transpose()?,
+        trusted_endpoints: info.endpoints,
     };
     write_monitor_config(&config)?;
     restart_monitor(verbose)?;
@@ -128,11 +135,12 @@ pub fn status() -> Result<String> {
 pub fn generate_rules(
     leak: bool,
     local: bool,
+    reconnect: bool,
     ipv4: Option<&str>,
     verbose: Verbosity,
 ) -> Result<String> {
     let info = detect_with_override(ipv4, verbose)?;
-    rules::generate(&info, leak, local)
+    rules::generate(&info, leak, local, reconnect)
 }
 
 /// Show the detection result used by rule generation.
@@ -154,11 +162,27 @@ fn write_monitor_config(config: &MonitorConfig) -> Result<()> {
     let manual = config
         .manual_endpoint
         .map_or_else(String::new, |address| address.to_string());
-    let contents = format!(
-        "leak={}\nlocal={}\nmanual_endpoint={manual}\n",
+    let mut contents = format!(
+        "leak={}\nlocal={}\nreconnect={}\nmanual_endpoint={manual}\n",
         u8::from(config.leak),
-        u8::from(config.local)
+        u8::from(config.local),
+        u8::from(config.reconnect)
     );
+    for endpoint in &config.trusted_endpoints {
+        let transport = match endpoint.transport {
+            Transport::Tcp => "tcp",
+            Transport::Udp => "udp",
+            Transport::Any => "any",
+        };
+        let port = endpoint
+            .port
+            .map_or_else(String::new, |port| port.to_string());
+        writeln!(
+            contents,
+            "trusted_endpoint={transport}|{}|{port}",
+            endpoint.address
+        )?;
+    }
     let mut options = OpenOptions::new();
     options.write(true).create(true).truncate(true).mode(0o600);
     let mut file = options
@@ -180,7 +204,9 @@ fn read_monitor_config() -> Result<MonitorConfig> {
 fn parse_monitor_config(contents: &str) -> Result<MonitorConfig> {
     let mut leak = false;
     let mut local = false;
+    let mut reconnect = false;
     let mut manual_endpoint = None;
+    let mut trusted_endpoints = Vec::new();
     for line in contents.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
@@ -188,16 +214,50 @@ fn parse_monitor_config(contents: &str) -> Result<MonitorConfig> {
         match key {
             "leak" => leak = value == "1",
             "local" => local = value == "1",
+            "reconnect" => reconnect = value == "1",
             "manual_endpoint" if !value.is_empty() => {
                 manual_endpoint = Some(validate_manual_endpoint(value)?);
             }
+            "trusted_endpoint" => trusted_endpoints.push(parse_trusted_endpoint(value)?),
             _ => {}
         }
     }
+    trusted_endpoints.sort();
+    trusted_endpoints.dedup();
     Ok(MonitorConfig {
         leak,
         local,
+        reconnect,
         manual_endpoint,
+        trusted_endpoints,
+    })
+}
+
+fn parse_trusted_endpoint(value: &str) -> Result<VpnEndpoint> {
+    let mut fields = value.split('|');
+    let transport = match fields.next() {
+        Some("tcp") => Transport::Tcp,
+        Some("udp") => Transport::Udp,
+        Some("any") => Transport::Any,
+        _ => bail!("Invalid trusted endpoint transport"),
+    };
+    let address = fields
+        .next()
+        .context("Missing trusted endpoint address")?
+        .parse()
+        .context("Invalid trusted endpoint address")?;
+    let port = match fields.next() {
+        Some("") => None,
+        Some(port) => Some(port.parse().context("Invalid trusted endpoint port")?),
+        None => bail!("Missing trusted endpoint port"),
+    };
+    if fields.next().is_some() {
+        bail!("Invalid trusted endpoint fields");
+    }
+    Ok(VpnEndpoint {
+        address,
+        port,
+        transport,
     })
 }
 
@@ -233,9 +293,25 @@ fn restart_monitor(verbose: Verbosity) -> Result<()> {
 }
 
 fn stop_monitor(verbose: Verbosity) -> Result<()> {
+    let mut monitor_pids = BTreeSet::new();
     if let Ok(contents) = fs::read_to_string(MONITOR_PID_PATH)
         && let Ok(pid) = contents.trim().parse::<libc::pid_t>()
-        && process_is_monitor(pid)
+    {
+        monitor_pids.insert(pid);
+    }
+    if let Ok(output) = Command::new("ps")
+        .args(["ax", "-o", "pid=,command="])
+        .output()
+        && output.status.success()
+    {
+        monitor_pids.extend(parse_monitor_processes(&String::from_utf8_lossy(
+            &output.stdout,
+        )));
+    }
+
+    for pid in monitor_pids
+        .into_iter()
+        .filter(|pid| process_is_monitor(*pid))
     {
         let result = unsafe { libc::kill(pid, libc::SIGTERM) };
         if result != 0 {
@@ -258,37 +334,84 @@ fn process_is_monitor(pid: libc::pid_t) -> bool {
         .args(["-p", &pid.to_string(), "-o", "command="])
         .output();
     output.is_ok_and(|value| {
-        value.status.success()
-            && String::from_utf8_lossy(&value.stdout).contains("killswitch --monitor")
+        value.status.success() && command_is_monitor(&String::from_utf8_lossy(&value.stdout))
     })
 }
 
+fn parse_monitor_processes(input: &str) -> Vec<libc::pid_t> {
+    input
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim_start();
+            let (raw_pid, command) = line.split_once(char::is_whitespace)?;
+            command_is_monitor(command)
+                .then(|| raw_pid.parse().ok())
+                .flatten()
+        })
+        .collect()
+}
+
+fn command_is_monitor(command: &str) -> bool {
+    let mut arguments = command.split_whitespace();
+    let Some(executable) = arguments.next() else {
+        return false;
+    };
+    let Some(name) = Path::new(executable)
+        .file_name()
+        .and_then(|name| name.to_str())
+    else {
+        return false;
+    };
+    (name == "killswitch" || name.starts_with("killswitch-"))
+        && arguments.any(|argument| argument == "--monitor")
+}
+
+fn monitor_pid_is_current(pid: u32) -> bool {
+    fs::read_to_string(MONITOR_PID_PATH).is_ok_and(|contents| contents.trim() == pid.to_string())
+}
+
+fn reconnect_endpoints(
+    known_endpoints: &BTreeSet<VpnEndpoint>,
+    detected_endpoints: &[VpnEndpoint],
+    bootstrap_endpoints: &[VpnEndpoint],
+) -> Vec<VpnEndpoint> {
+    let mut selected = Vec::new();
+    for endpoint in detected_endpoints.iter().chain(bootstrap_endpoints) {
+        if selected.len() == MAX_RECONNECT_ENDPOINTS {
+            break;
+        }
+        if endpoint.port == Some(443)
+            && matches!(endpoint.transport, Transport::Tcp | Transport::Udp)
+            && !known_endpoints.contains(endpoint)
+            && !selected.contains(endpoint)
+        {
+            selected.push(endpoint.clone());
+        }
+    }
+    selected
+}
+
 /// Hidden monitor entry point. It always removes a stale tunnel allow rule
-/// when detection becomes uncertain, while retaining only observed VPN server
-/// endpoints so the provider can reconnect.
+/// when detection becomes uncertain. Endpoint exceptions are pinned when the
+/// kill switch is enabled; the monitor never learns from later direct sockets.
 ///
 /// # Errors
 /// Returns an error if privileges or the persisted monitor configuration is invalid.
 pub fn monitor() -> Result<()> {
     check_root()?;
     let config = read_monitor_config()?;
-    let mut known_endpoints = BTreeSet::new();
-    if let Some(address) = config.manual_endpoint {
-        known_endpoints.insert(VpnEndpoint {
-            address: IpAddr::V4(address),
-            port: None,
-            transport: Transport::Any,
-        });
-    }
+    let known_endpoints: BTreeSet<_> = config.trusted_endpoints.iter().cloned().collect();
     let mut previous = fs::read_to_string("/var/run/killswitch.pf.conf").unwrap_or_default();
 
     loop {
         let mut info = network::detect_vpn(Verbosity::Normal);
-        if config.manual_endpoint.is_none() && !info.endpoints.is_empty() {
-            known_endpoints = info.endpoints.iter().cloned().collect();
-        }
+        info.bootstrap_endpoints = if config.reconnect {
+            reconnect_endpoints(&known_endpoints, &info.endpoints, &info.bootstrap_endpoints)
+        } else {
+            Vec::new()
+        };
         info.endpoints = known_endpoints.iter().cloned().collect();
-        if let Ok(generated) = rules::generate(&info, config.leak, config.local)
+        if let Ok(generated) = rules::generate(&info, config.leak, config.local, config.reconnect)
             && generated != previous
             && pf::apply_rules(
                 &generated,
@@ -301,6 +424,9 @@ pub fn monitor() -> Result<()> {
             previous = generated;
         }
         thread::sleep(MONITOR_INTERVAL);
+        if !monitor_pid_is_current(std::process::id()) {
+            return Ok(());
+        }
     }
 }
 
@@ -318,22 +444,97 @@ mod tests {
 
     #[test]
     fn test_monitor_config_round_trip_parser() {
-        let config = parse_monitor_config("leak=0\nlocal=1\nmanual_endpoint=216.211.192.107\n")
-            .unwrap_or(MonitorConfig {
-                leak: true,
-                local: false,
-                manual_endpoint: None,
-            });
+        let config = parse_monitor_config(concat!(
+            "leak=0\n",
+            "local=1\n",
+            "reconnect=1\n",
+            "manual_endpoint=198.51.100.107\n",
+            "trusted_endpoint=any|198.51.100.107|\n",
+            "trusted_endpoint=tcp|2001:db8::8|443\n",
+        ))
+        .unwrap_or(MonitorConfig {
+            leak: true,
+            local: false,
+            reconnect: false,
+            manual_endpoint: None,
+            trusted_endpoints: Vec::new(),
+        });
         assert!(!config.leak);
         assert!(config.local);
+        assert!(config.reconnect);
         assert_eq!(
             config.manual_endpoint,
-            Some(Ipv4Addr::new(216, 211, 192, 107))
+            Some(Ipv4Addr::new(198, 51, 100, 107))
+        );
+        assert_eq!(config.trusted_endpoints.len(), 2);
+        assert_eq!(
+            config.trusted_endpoints.get(1),
+            Some(&VpnEndpoint {
+                address: "2001:db8::8"
+                    .parse()
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                port: Some(443),
+                transport: Transport::Tcp,
+            })
         );
     }
 
     #[test]
     fn test_monitor_config_rejects_private_manual_endpoint() {
         assert!(parse_monitor_config("manual_endpoint=192.168.1.1\n").is_err());
+    }
+
+    #[test]
+    fn test_monitor_process_detection_accepts_renamed_binary() {
+        assert!(command_is_monitor(
+            "/opt/homebrew/bin/killswitch-ne --monitor"
+        ));
+        assert!(command_is_monitor("/usr/local/bin/killswitch --monitor"));
+        assert!(!command_is_monitor("/usr/local/bin/killswitch --status"));
+        assert!(!command_is_monitor("/usr/bin/not-killswitch --monitor"));
+    }
+
+    #[test]
+    fn test_parse_monitor_processes_finds_all_instances() {
+        let processes = concat!(
+            " 34249 /opt/homebrew/bin/killswitch-ne --monitor\n",
+            " 51068 /opt/homebrew/bin/killswitch-ne --monitor\n",
+            " 52000 /usr/local/bin/killswitch --status\n",
+        );
+
+        assert_eq!(parse_monitor_processes(processes), [34249, 51068]);
+    }
+
+    #[test]
+    fn test_monitor_config_rejects_malformed_trusted_endpoint() {
+        assert!(parse_monitor_config("trusted_endpoint=tcp|not-an-ip|443\n").is_err());
+        assert!(parse_monitor_config("trusted_endpoint=sctp|203.0.113.1|443\n").is_err());
+    }
+
+    #[test]
+    fn test_reconnect_endpoints_are_bounded_and_exclude_pinned_transport() {
+        let pinned = VpnEndpoint {
+            address: IpAddr::V4(Ipv4Addr::new(198, 51, 100, 107)),
+            port: Some(443),
+            transport: Transport::Tcp,
+        };
+        let detected: Vec<_> = (1..=12)
+            .map(|last| VpnEndpoint {
+                address: IpAddr::V4(Ipv4Addr::new(203, 0, 113, last)),
+                port: Some(443),
+                transport: Transport::Tcp,
+            })
+            .collect();
+        let ignored = VpnEndpoint {
+            address: IpAddr::V4(Ipv4Addr::new(203, 0, 113, 100)),
+            port: Some(80),
+            transport: Transport::Tcp,
+        };
+        let known = BTreeSet::from([pinned.clone()]);
+
+        let selected = reconnect_endpoints(&known, &[pinned, ignored], &detected);
+
+        assert_eq!(selected.len(), MAX_RECONNECT_ENDPOINTS);
+        assert!(selected.iter().all(|endpoint| endpoint.port == Some(443)));
     }
 }

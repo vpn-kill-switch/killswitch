@@ -29,10 +29,18 @@ switch. Allowed packets are tagged and continue through later system anchors;
 only disallowed direct traffic terminates evaluation with `block quick`.
 
 When enabled, a small root monitor checks the route, tunnel and provider
-sockets every two seconds. A reconnect from `utun4` to `utun5`, or a change of
-VPN server endpoint, reloads only the killswitch anchor. When the tunnel
-disappears, its allow rule is removed while the last observed VPN endpoint is
-kept so the provider can reconnect.
+sockets every two seconds. A reconnect from `utun4` to `utun5` reloads only
+the killswitch anchor. The endpoint detected at enable time is pinned: when
+the tunnel disappears its allow rule is removed, but that endpoint remains
+allowed so the provider can reconnect to the same server. A different server
+endpoint is not learned from direct sockets while the kill switch is active;
+disable, connect to the new server, then enable again.
+
+For AdGuard VPN, `--reconnect` additionally permits up to eight temporary
+TCP/UDP port 443 destinations currently opened by the AdGuard process. The set
+is replaced on every monitor pass and never accumulated. This lets AdGuard run
+its bootstrap/connectivity checks and reconnect automatically, at the cost of
+narrow direct exceptions to those observed destinations.
 
 ## Usage
 
@@ -47,6 +55,10 @@ Preview the exact PF anchor rules:
 Enable the kill switch and monitor:
 
     sudo killswitch -e -v
+
+Enable automatic AdGuard reconnect support:
+
+    sudo killswitch -e --reconnect -v
 
 Show anchor counters or disable it:
 
@@ -66,6 +78,7 @@ and UDP to that IP because the legacy flag has no protocol or port information.
 | `-s`, `--status` | Show rules and packet counters for this anchor |
 | `-p`, `--print` | Print rules without applying them |
 | `--local` | Permit traffic within the physical interface's local network |
+| `--reconnect` | Temporarily permit bounded AdGuard bootstrap sockets on port 443 |
 | `--leak` | Explicitly permit direct DNS and ICMP (reduces leak protection) |
 | `--ipv4 <IP>` | Legacy manual public IPv4 endpoint override |
 | `-v`, `-vv` | Verbose / debug output |

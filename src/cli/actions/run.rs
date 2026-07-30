@@ -12,6 +12,7 @@ pub fn execute(action: &Action) -> Result<()> {
             ipv4,
             leak,
             local,
+            reconnect,
             verbose,
         } => {
             if verbose.is_verbose() {
@@ -25,8 +26,11 @@ pub fn execute(action: &Action) -> Result<()> {
                 if *local {
                     eprintln!("  Allowing local network");
                 }
+                if *reconnect {
+                    eprintln!("  Allowing temporary AdGuard reconnect bootstrap sockets");
+                }
             }
-            killswitch::enable(*leak, *local, ipv4.as_deref(), *verbose)?;
+            killswitch::enable(*leak, *local, *reconnect, ipv4.as_deref(), *verbose)?;
             println!("✓ VPN kill switch enabled");
         }
 
@@ -50,12 +54,14 @@ pub fn execute(action: &Action) -> Result<()> {
             ipv4,
             leak,
             local,
+            reconnect,
             verbose,
         } => {
             if verbose.is_verbose() {
                 eprintln!("Generating pf rules...");
             }
-            let rules = killswitch::generate_rules(*leak, *local, ipv4.as_deref(), *verbose)?;
+            let rules =
+                killswitch::generate_rules(*leak, *local, *reconnect, ipv4.as_deref(), *verbose)?;
             println!("{rules}");
         }
 
@@ -83,6 +89,7 @@ mod tests {
             ipv4: Some("203.0.113.1".to_string()),
             leak: false,
             local: false,
+            reconnect: false,
             verbose: Verbosity::Normal,
         };
 
@@ -98,6 +105,7 @@ mod tests {
             ipv4: Some("198.51.100.1".to_string()),
             leak: true,
             local: true,
+            reconnect: true,
             verbose: Verbosity::Normal,
         };
 
@@ -112,6 +120,7 @@ mod tests {
             ipv4: Some("10.8.0.1".to_string()),
             leak: false,
             local: false,
+            reconnect: false,
             verbose: Verbosity::Normal,
         };
 
@@ -126,6 +135,7 @@ mod tests {
             ipv4: Some("10.8.0.1".to_string()),
             leak: false,
             local: false,
+            reconnect: false,
             verbose: Verbosity::Normal,
         };
 
