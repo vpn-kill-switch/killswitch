@@ -1,79 +1,106 @@
 # killswitch
 
-VPN kill switch for macOS. Blocks all outgoing traffic when the VPN connection
-drops, preventing your real IP from leaking.
+Fail-closed VPN kill switch for macOS. It supports dynamic Network Extension
+packet tunnels such as AdGuard VPN as well as WireGuard and Tailscale.
 
 ## How it works
 
-When enabled, killswitch loads [pf](https://docs.freebsd.org/en/books/handbook/firewalls/#firewalls-pf) firewall
-rules that only allow traffic through the VPN tunnel. If the VPN disconnects,
-the tunnel interface disappears but the firewall rules remain — blocking all
-internet traffic until the VPN reconnects or the kill switch is disabled.
+macOS Network Extension VPNs do not necessarily expose their remote server as
+a routing-table gateway. Killswitch therefore detects the two parts of the VPN
+path independently:
 
-Rules are written to `/tmp/killswitch.pf.conf` and loaded with `pfctl`.
-The system default `/etc/pf.conf` is never modified.
+- the active `utunN` is selected from its tunnel addresses and routed prefixes;
+- the physical path comes from the default route (for example, `en0`);
+- the outer endpoint, protocol, and port come from sockets owned by a known VPN
+  provider process (for example, `AdGuard VPN` using UDP/443).
+
+The generated policy permits loopback, DHCP, the selected VPN endpoint on the
+physical interface, and traffic on only the selected tunnel. Its final rule
+blocks all other outbound IPv4 and IPv6 traffic. If detection is uncertain, no
+tunnel allow rule is emitted.
+
+Rules are loaded only into the `killswitch` PF anchor. The program never runs
+`pfctl -Fa` or flushes another anchor. On first use only, if `/etc/pf.conf` has
+no `anchor "killswitch"` attachment point, killswitch validates and adds that
+single line, saves `/etc/pf.conf.killswitch.backup`, and reloads `/etc/pf.conf`
+without a flush flag. If the line exists after another filter anchor, it is
+moved before those anchors so their `quick` rules cannot bypass the kill
+switch. Allowed packets are tagged and continue through later system anchors;
+only disallowed direct traffic terminates evaluation with `block quick`.
+
+When enabled, a small root monitor checks the route, tunnel and provider
+sockets every two seconds. A reconnect from `utun4` to `utun5`, or a change of
+VPN server endpoint, reloads only the killswitch anchor. When the tunnel
+disappears, its allow rule is removed while the last observed VPN endpoint is
+kept so the provider can reconnect.
 
 ## Usage
 
-Show network interfaces, public IP, and detected VPN peer:
+Show the detected VPN path:
 
-    $ killswitch
+    killswitch -vv
 
-Enable the kill switch (requires root):
+Preview the exact PF anchor rules:
 
-    $ sudo killswitch -e
+    killswitch --print -vv
 
-Disable and restore default firewall rules:
+Enable the kill switch and monitor:
 
-    $ sudo killswitch -d
+    sudo killswitch -e -v
 
-Print the firewall rules without applying them:
+Show anchor counters or disable it:
 
-    $ killswitch --print
+    sudo killswitch --status
+    sudo killswitch -d -v
+
+`--ipv4 <IP>` remains available for compatibility, but it is not required for
+AdGuard VPN when its provider socket is visible. A manual endpoint permits TCP
+and UDP to that IP because the legacy flag has no protocol or port information.
 
 ### Options
 
 | Flag | Description |
 |------|-------------|
-| `--leak` | Allow ICMP (ping) and DNS requests outside the VPN |
-| `--local` | Allow local network traffic |
-| `--ipv4 <IP>` | Manually specify the VPN peer IP (auto-detected if omitted) |
+| `-e`, `--enable` | Enable the anchor and dynamic monitor |
+| `-d`, `--disable` | Stop the monitor and flush only this anchor |
+| `-s`, `--status` | Show rules and packet counters for this anchor |
+| `-p`, `--print` | Print rules without applying them |
+| `--local` | Permit traffic within the physical interface's local network |
+| `--leak` | Explicitly permit direct DNS and ICMP (reduces leak protection) |
+| `--ipv4 <IP>` | Legacy manual public IPv4 endpoint override |
 | `-v`, `-vv` | Verbose / debug output |
 
-### Examples
+## macOS verification
 
-Enable with DNS leak and local network access:
+PF's main `-sr` view shows the anchor call, not the nested rules. Inspect the
+anchor and its counters explicitly:
 
-    $ sudo killswitch -e --leak --local
+    sudo pfctl -a killswitch -vvsr
+    sudo pfctl -ss
 
-Specify the VPN peer IP manually:
+Observe the inner and outer paths in separate terminals:
 
-    $ sudo killswitch -e --ipv4 203.0.113.1
+    sudo tcpdump -ni en0
+    sudo tcpdump -ni utun4
 
-Preview rules in debug mode:
+Test both address families. With the VPN connected, IPv4 must show the VPN
+address; IPv6 must show a VPN address or time out. With the VPN disconnected
+while killswitch remains enabled, both commands must time out:
 
-    $ killswitch --print --leak -vv
+    curl -4 --max-time 10 https://api.ipify.org
+    curl -6 --max-time 10 https://api64.ipify.org
 
-## VPN detection
+Apple documents PF as a legacy, unsupported API for third-party products. This
+project therefore validates the generated rules before loading them and keeps
+all normal updates scoped to its anchor, but final packet-path verification is
+still required on each supported macOS release.
 
-The VPN gateway IP is auto-detected using multiple methods (in order):
+## Build and test
 
-1. **sysctl** — reads the kernel routing table directly
-2. **netstat** — parses routes with `UGSH`/`UGSc` flags
-3. **scutil** — queries macOS Network Extension services (works with WireGuard, ProtonVPN, etc.)
-4. **ifconfig** — extracts peer addresses from tunnel interfaces
+    just test
+    cargo build --release --locked
 
-If auto-detection fails, use `--ipv4` to specify the VPN peer IP manually.
+The ignored real-PF parser test is non-mutating but requires root:
 
-## Build from source
-
-Requires [Rust](https://www.rust-lang.org/tools/install):
-
-    $ cargo build --release
-    $ sudo cp target/release/killswitch /usr/local/bin/
-
-### Development
-
-    $ just test       # format check + clippy + tests
-    $ just fmt        # check formatting
-    $ just clippy     # lint all targets
+    sudo env CARGO_TARGET_DIR=/private/tmp/killswitch-root-tests \
+      cargo test test_real_pf_parser_integration -- --ignored

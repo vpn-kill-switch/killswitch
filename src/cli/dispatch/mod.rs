@@ -11,8 +11,11 @@ pub fn handler(matches: &ArgMatches, verbose: Verbosity) -> Result<Action> {
     let disable = matches.get_flag("disable");
     let status = matches.get_flag("status");
     let print = matches.get_flag("print");
+    let monitor = matches.get_flag("monitor");
 
-    if enable {
+    if monitor {
+        Ok(Action::Monitor)
+    } else if enable {
         let ipv4 = matches.get_one::<String>("ipv4").map(String::from);
         let leak = matches.get_flag("leak");
         let local = matches.get_flag("local");

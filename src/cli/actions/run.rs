@@ -63,6 +63,8 @@ pub fn execute(action: &Action) -> Result<()> {
             let output = killswitch::show_interfaces(*verbose)?;
             print!("{output}");
         }
+
+        Action::Monitor => killswitch::monitor()?,
     }
 
     Ok(())

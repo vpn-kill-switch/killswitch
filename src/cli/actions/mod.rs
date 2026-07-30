@@ -26,6 +26,7 @@ pub enum Action {
     ShowInterfaces {
         verbose: Verbosity,
     },
+    Monitor,
 }
 
 impl Action {

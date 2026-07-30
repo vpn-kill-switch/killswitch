@@ -91,6 +91,13 @@ pub fn new() -> Command {
                 .help("Increase output verbosity (-v: verbose, -vv: debug)")
                 .action(ArgAction::Count),
         )
+        .arg(
+            Arg::new("monitor")
+                .long("monitor")
+                .hide(true)
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["enable", "disable", "status", "print"]),
+        )
 }
 
 #[cfg(test)]

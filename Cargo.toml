@@ -46,7 +46,6 @@ large_stack_arrays = "deny"
 
 [dependencies]
 anyhow = "1"
-chrono = { version = "0.4.44", default-features = false, features = ["clock"] }
 clap = { version = "4", features = ["string", "env"] }
 libc = "0.2"
 nix = { version = "0.31", features = ["net"] }
