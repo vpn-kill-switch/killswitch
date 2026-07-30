@@ -13,7 +13,7 @@ jobs:
   test:
     uses: ./.github/workflows/test.yml
     with:
-      branch: ${{ github.ref_name }}
+      branch: ${{ github.ref }}
 
   build:
     name: Build
